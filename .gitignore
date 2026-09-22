@@ -12,5 +12,8 @@ dist/
 artifacts/
 .DS_Store
 
-#Data folder
-data/
+# Downloaded and generated data (keep the directory structure only)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep

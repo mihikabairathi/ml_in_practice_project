@@ -52,8 +52,9 @@ data/raw/recipes.parquet
 data/raw/interactions.parquet
 ```
 
-The `data/` directory is ignored by Git, so each contributor should run the
-script locally.
+The dataset files are ignored by Git, while placeholder files preserve the
+`data/raw/` and `data/processed/` directory structure. Each contributor should
+run the script locally.
 
 ## Project structure
 
