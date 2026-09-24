@@ -56,6 +56,8 @@ The dataset files are ignored by Git, while placeholder files preserve the
 `data/raw/` and `data/processed/` directory structure. Each contributor should
 run the script locally.
 
+Note: if you are having trouble activating environments, you can run this locally instead: `PYTHONPATH=src python scripts/download_data.py`
+
 ## Project structure
 
 ```text
