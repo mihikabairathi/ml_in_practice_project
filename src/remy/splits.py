@@ -58,49 +58,60 @@ class RollingSplits:
             At each task, create a fresh model and train on the available past.
             Use that task's outcomes only for scoring, never for its own fit.
 
-    Both methods support a for loop and return one Quarter at a time, avoiding
-    many copies of cumulative history in memory. Model settings are selected on
-    validation and then kept fixed throughout the rolling test run.
+    Both methods return ordinary lists of Quarter objects, so indexing, slicing,
+    and repeated iteration work normally. Histories and recipe tables are slices
+    of the shared data rather than separately stored copies. Model settings are
+    selected on validation and kept fixed throughout the rolling test run.
     """
 
     def __init__(self, directory=SPLIT_DIR):
         directory = Path(directory)
         self.interactions = pd.read_parquet(directory / "interactions.parquet")
+        self.interactions = self.interactions.sort_values("date").reset_index(drop=True)
         self.recipes = pd.read_parquet(directory / "recipes.parquet")
+        self.recipes = self.recipes.sort_values("submitted").reset_index(drop=True)
         self.windows = pd.read_parquet(directory / "windows.parquet")
         self.windows = self.windows.sort_values("start").reset_index(drop=True)
 
-    def training_quarters(self, cutoff):
+    def training_quarters(self, cutoff) -> list[Quarter]:
         """Return completed history/label tasks, ending on or before cutoff.
 
         For example, training at January 2007 can use October-December 2006
         labels, paired with history before October 2006. It cannot use any
-        January-March 2007 labels. Call this method again to make another pass.
+        January-March 2007 labels. The returned list can be indexed or reused.
         """
         cutoff = pd.Timestamp(cutoff)
         completed = self.windows[self.windows["end"] <= cutoff]
+        quarters = []
         for window in completed.itertuples(index=False):
-            yield self._make_quarter(window.start, window.end)
+            quarters.append(self._make_quarter(window.start, window.end))
+        return quarters
 
-    def evaluation_quarters(self, split):
+    def evaluation_quarters(self, split) -> list[Quarter]:
         """Return the chronological held-out quarters for 'val' or 'test'."""
         if split not in {"val", "test"}:
             raise ValueError("split must be 'val' or 'test'")
         selected = self.windows[self.windows["split"] == split]
+        quarters = []
         for window in selected.itertuples(index=False):
-            yield self._make_quarter(window.start, window.end)
+            quarters.append(self._make_quarter(window.start, window.end))
+        return quarters
 
     def _make_quarter(self, start, end):
         """Apply the shared history, eligibility, and candidate rules to a window."""
-        history = self.interactions[self.interactions["date"] < start]
-        recipes = self.recipes[self.recipes["submitted"] < start]
+        # The tables are sorted by date. Slice at the cutoff rather than copying
+        # the full history/catalog for every Quarter in the returned lists.
+        history_end = self.interactions["date"].searchsorted(start)
+        outcome_end = self.interactions["date"].searchsorted(end)
+        recipes_end = self.recipes["submitted"].searchsorted(start)
+        history = self.interactions.iloc[:history_end]
+        recipes = self.recipes.iloc[:recipes_end]
         counts = history.groupby("user_id").size().rename("n_reviews")
         users = counts[counts >= MIN_REVIEWS].reset_index()
-        outcomes = self.interactions[
-            (self.interactions["date"] >= start)
-            & (self.interactions["date"] < end)
-            & self.interactions["user_id"].isin(users["user_id"])
-            & self.interactions["recipe_id"].isin(recipes["id"])
+        outcomes = self.interactions.iloc[history_end:outcome_end]
+        outcomes = outcomes[
+            outcomes["user_id"].isin(users["user_id"])
+            & outcomes["recipe_id"].isin(recipes["id"])
         ]
         # Compare user/recipe pairs to exclude recipes already reviewed by the
         # same user, even if a later version of the dataset has repeat reviews.

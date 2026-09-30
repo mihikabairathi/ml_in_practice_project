@@ -108,7 +108,7 @@ Keep a plain class with `fit` and `recommend`, following `Popularity`:
 
 `RollingSplits()` loads the generated files. Its two public methods are
 `training_quarters(cutoff)` and `evaluation_quarters("val" or "test")`.
-Both return one `Quarter` at a time, with `start`, `end`, `history`, `recipes`,
+Both return lists of `Quarter` objects, with `start`, `end`, `history`, `recipes`,
 `users` (including prior review counts), and `outcomes`.
 
 Create a fresh model at every evaluation quarter. Fit using its history and
