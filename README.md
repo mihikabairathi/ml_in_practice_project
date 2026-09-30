@@ -69,32 +69,53 @@ src/remy/
   paths.py                    # Shared PROJECT_ROOT path
   model/
     __init__.py
-    popularity.py             # Example class skeleton; not implemented
+    popularity.py             # Past-review-count baseline
+  splits.py                   # Shared quarterly training/evaluation data
 scripts/
   download_data.py            # CSV → Parquet
+  make_splits.py              # Save the common quarterly split data
 pyproject.toml                # Shared dependencies and package configuration
 ```
 
 Keep exploration in notebooks, reusable code in `src/remy/`, and runnable
 workflows in `scripts/`.
 
+## Shared quarterly splits
+
+After downloading the data, run `python scripts/make_splits.py`. It writes
+interactions, recipe metadata, and 52 quarterly boundaries/counts to
+`data/processed/rolling/` (ignored by Git).
+
+Training tasks cover 2003–2006, validation 2007–2010, and test 2011–2015.
+Earlier reviews remain history. Users need three prior reviews of any rating;
+positives are 5-star reviews in the next quarter on available, unseen recipes.
+The script's docstring explains the dates and rules.
+
+See [the rolling popularity notebook](notebooks/rolling_popularity.ipynb)
+for a short worked example, quarterly metrics, and charts. Existing exploratory
+notebooks retain their old splits; use the shared API for comparable experiments.
+
 ## Add a model
 
-Add a plain class in its own module under `src/remy/model/`. The `Popularity`
-skeleton illustrates possible inputs and outputs:
+Keep a plain class with `fit` and `recommend`, following `Popularity`:
 
-- `fit(interactions)` accepts a training DataFrame with `user_id`, `recipe_id`,
-  and `rating` columns and returns `self`.
-- `recommend(user_id, k=10)` returns a ranked list of original recipe IDs.
-  Popularity will return the same ranking for everyone.
+- `fit(interactions, *, recipes=None, training_quarters=())` returns `self`.
+  Supervised models build features from each training quarter's own history
+  and recipes, and labels from its outcomes. Popularity counts past reviews.
+- `recommend(user_id, k=10)` returns ranked, distinct recipe IDs from the
+  available catalog, excluding that user's previously reviewed recipes.
+  Include recipes with no past reviews using a fallback score if necessary.
 
-The methods currently raise `NotImplementedError`; fill them in when ready.
-There is no base class, training framework, or evaluation code. Keep
-`__init__.py` files empty and use absolute imports:
+`RollingSplits()` loads the generated files. Its two public methods are
+`training_quarters(cutoff)` and `evaluation_quarters("val" or "test")`.
+Both return one `Quarter` at a time, with `start`, `end`, `history`, `recipes`,
+`users` (including prior review counts), and `outcomes`.
 
-```python
-from remy.model.popularity import Popularity
-```
+Create a fresh model at every evaluation quarter. Fit using its history and
+completed earlier training quarters; use its outcomes only for scoring.
+Completed validation/test quarters become training history at later cutoffs.
+Choose settings on validation and keep them fixed throughout test. Keep
+`__init__.py` files empty; no base class or registry is needed.
 
 ## File paths
 
