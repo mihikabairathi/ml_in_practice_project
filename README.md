@@ -126,7 +126,7 @@ rolling quarters:
 
 ```bash
 python scripts/run_experiments.py --models popularity item_knn --split val
-python scripts/run_experiments.py --models item_knn --split test --k-neighbors 50 --min-rating 4
+python scripts/run_experiments.py --models item_knn --split test --k-neighbors 50
 python scripts/run_experiments.py --models lightgbm --split val --max-quarters 2
 ```
 
@@ -135,7 +135,10 @@ The script fits a fresh model from each quarter's earlier history and scores
 quarters. It reports mean full-ranking NDCG, hit rate and recall at 10 and 100,
 plus candidate recall for models that score a subset before popularity fallback.
 Per-quarter results go to `data/processed/rolling/experiments_<split>.csv` by
-default. Use `--output` to keep multiple parameter runs separately and
+default. The script also saves quarterly trend and model comparison charts as
+PNG files beside the CSV. Item KNN uses 5-star reviews as its positive signal
+by default; `--min-rating` overrides this. Use `--output` to keep multiple
+parameter runs separately, `--no-plots` to skip chart generation, and
 `--help` for all options. Choose model settings on validation before running
 test. On macOS, LightGBM may also need the OpenMP runtime (`libomp`) installed.
 

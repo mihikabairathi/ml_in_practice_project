@@ -32,10 +32,11 @@ def parse_args(argv=None):
     parser.add_argument("--split-dir", type=Path, default=SPLIT_DIR, help="Directory from make_splits.py")
     parser.add_argument("--output", type=Path, help="Results CSV (default: split-dir/experiments_<split>.csv)")
     parser.add_argument("--k-neighbors", type=int, default=50, help="Item KNN neighbors per item")
-    parser.add_argument("--min-rating", type=float, default=4.0, help="Item KNN positive rating threshold")
+    parser.add_argument("--min-rating", type=float, default=5.0, help="Item KNN positive rating threshold (default: 5)")
     parser.add_argument("--train-quarters", type=int, default=8, help="Most recent training quarters for LightGBM")
     parser.add_argument("--max-train-users", type=int, default=3000, help="Training users per quarter for LightGBM")
     parser.add_argument("--boost-rounds", type=int, default=200, help="LightGBM boosting rounds")
+    parser.add_argument("--no-plots", action="store_true", help="Skip saving the PNG charts")
     args = parser.parse_args(argv)
     for name in ("max_quarters", "train_quarters", "max_train_users", "boost_rounds"):
         value = getattr(args, name)
@@ -111,6 +112,59 @@ def evaluate_quarter(model, quarter, name):
     return result
 
 
+def save_plots(results: pd.DataFrame, output: Path) -> tuple[Path, Path]:
+    """Save quarter trends and a model comparison beside the results CSV."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.dates as mdates
+    import matplotlib.pyplot as plt
+
+    models = list(results["model"].unique())
+    colors = {name: plt.get_cmap("tab10")(i) for i, name in enumerate(models)}
+    titles = [
+        ("NDCG", "Full-ranking NDCG"),
+        ("HR@10", "Hit rate @10"),
+        ("Recall@10", "Recall @10"),
+    ]
+    fourth = ("candidate_recall", "Candidate recall") if results["candidate_recall"].notna().any() else ("scored_users", "Scored users")
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8), constrained_layout=True, sharex=True)
+    for ax, (metric, title) in zip(axes.flat, [*titles, fourth]):
+        for name in models:
+            frame = results.loc[results["model"] == name].sort_values("start")
+            if frame[metric].notna().any():
+                ax.plot(frame["start"], frame[metric], marker="o", linewidth=2, label=name, color=colors[name])
+        ax.set_title(title)
+        ax.grid(alpha=0.2)
+        if metric != "scored_users":
+            ax.set_ylim(0, 1)
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
+    axes[0, 0].legend(loc="upper right", frameon=False)
+    fig.suptitle(f"Rolling {results['split'].iloc[0]} performance", fontsize=16)
+    trend_path = output.with_name(f"{output.stem}_quarters.png")
+    fig.savefig(trend_path, dpi=160)
+    plt.close(fig)
+
+    means = results.groupby("model")[METRICS].mean().reindex(models)
+    fig, ax = plt.subplots(figsize=(11, 5), constrained_layout=True)
+    x = np.arange(len(METRICS))
+    width = 0.8 / len(models)
+    for i, name in enumerate(models):
+        ax.bar(x - 0.4 + width * (i + 0.5), means.loc[name], width, label=name, color=colors[name])
+    ax.set_xticks(x, METRICS)
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("Mean across quarters")
+    ax.set_title(f"Model comparison · {results['split'].iloc[0]}")
+    ax.grid(axis="y", alpha=0.2)
+    ax.set_axisbelow(True)
+    ax.legend(frameon=False)
+    summary_path = output.with_name(f"{output.stem}_summary.png")
+    fig.savefig(summary_path, dpi=160)
+    plt.close(fig)
+    return trend_path, summary_path
+
+
 def run(args):
     splits = RollingSplits(args.split_dir)
     quarters = splits.evaluation_quarters(args.split)
@@ -134,6 +188,9 @@ def run(args):
     output = args.output or args.split_dir / f"experiments_{args.split}.csv"
     output.parent.mkdir(parents=True, exist_ok=True)
     results.to_csv(output, index=False)
+    if not args.no_plots:
+        plot_paths = save_plots(results, output)
+        print(f"Saved charts: {plot_paths[0]}, {plot_paths[1]}")
     print(f"\nMean across quarters:\n{results.groupby('model')[METRICS].mean().round(4).to_string()}")
     print(f"\nSaved {output}")
     return results

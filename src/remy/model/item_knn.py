@@ -17,7 +17,7 @@ class ItemKNNRecommender:
     unsupervised baseline learns directly from the current history.
     """
 
-    def __init__(self, k_neighbors: int = 50, min_rating: float = 4.0):
+    def __init__(self, k_neighbors: int = 50, min_rating: float = 5.0):
         if k_neighbors < 1:
             raise ValueError("k_neighbors must be positive")
         self.k_neighbors = k_neighbors
