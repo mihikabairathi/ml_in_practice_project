@@ -70,10 +70,12 @@ src/remy/
   model/
     __init__.py
     popularity.py             # Past-review-count baseline
+    item_knn.py               # Item-to-item cosine collaborative filtering
   splits.py                   # Shared quarterly training/evaluation data
 scripts/
   download_data.py            # CSV → Parquet
   make_splits.py              # Save the common quarterly split data
+  run_experiments.py          # Compare models on rolling validation/test tasks
 pyproject.toml                # Shared dependencies and package configuration
 ```
 
@@ -116,6 +118,26 @@ completed earlier training quarters; use its outcomes only for scoring.
 Completed validation/test quarters become training history at later cutoffs.
 Choose settings on validation and keep them fixed throughout test. Keep
 `__init__.py` files empty; no base class or registry is needed.
+
+## Run experiments
+
+After `python scripts/make_splits.py`, run one or more models on the common
+rolling quarters:
+
+```bash
+python scripts/run_experiments.py --models popularity item_knn --split val
+python scripts/run_experiments.py --models item_knn --split test --k-neighbors 50 --min-rating 4
+python scripts/run_experiments.py --models lightgbm --split val --max-quarters 2
+```
+
+The script fits a fresh model from each quarter's earlier history and scores
+5-star reviews in that quarter. LightGBM also trains on completed earlier
+quarters. It reports mean full-ranking NDCG, hit rate and recall at 10 and 100,
+plus candidate recall for models that score a subset before popularity fallback.
+Per-quarter results go to `data/processed/rolling/experiments_<split>.csv` by
+default. Use `--output` to keep multiple parameter runs separately and
+`--help` for all options. Choose model settings on validation before running
+test. On macOS, LightGBM may also need the OpenMP runtime (`libomp`) installed.
 
 ## File paths
 
