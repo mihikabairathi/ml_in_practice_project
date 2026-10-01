@@ -134,12 +134,13 @@ The script fits a fresh model from each quarter's earlier history and scores
 5-star reviews in that quarter. LightGBM also trains on completed earlier
 quarters. It reports mean full-ranking NDCG, hit rate and recall at 10 and 100,
 plus candidate recall for models that score a subset before popularity fallback.
-Per-quarter results go to `data/processed/rolling/experiments_<split>.csv` by
-default. The script also saves quarterly trend and model comparison charts as
-PNG files beside the CSV. Item KNN uses 5-star reviews as its positive signal
-by default; `--min-rating` overrides this. Use `--output` to keep multiple
-parameter runs separately, `--no-plots` to skip chart generation, and
-`--help` for all options. Choose model settings on validation before running
+Each run gets a unique folder under the repository-root `artifacts/` directory,
+containing `results.csv`, `run_config.json`, a quarterly trend chart, and a
+model comparison chart. Use `--run-name` to name that folder or
+`--artifacts-dir` to change its parent. Item KNN uses 5-star reviews as its
+positive signal by default; `--min-rating` overrides this. `--output` overrides
+the CSV path and saves plots beside it. Use `--no-plots` to skip chart
+generation and `--help` for all options. Choose model settings on validation before running
 test. On macOS, LightGBM may also need the OpenMP runtime (`libomp`) installed.
 
 ## File paths

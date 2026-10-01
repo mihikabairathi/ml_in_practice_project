@@ -9,6 +9,8 @@ Examples (after ``python scripts/make_splits.py``)::
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
+import json
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +18,7 @@ import pandas as pd
 
 from remy.model.item_knn import ItemKNNRecommender
 from remy.model.popularity import Popularity
+from remy.paths import PROJECT_ROOT
 from remy.splits import RollingSplits, SPLIT_DIR
 
 METRICS = ["NDCG", "HR@10", "HR@100", "Recall@10", "Recall@100"]
@@ -30,7 +33,9 @@ def parse_args(argv=None):
     parser.add_argument("--split", choices=("val", "test"), default="val", help="Evaluation period (default: val)")
     parser.add_argument("--max-quarters", type=int, help="Score only the first N quarters, for a quick run")
     parser.add_argument("--split-dir", type=Path, default=SPLIT_DIR, help="Directory from make_splits.py")
-    parser.add_argument("--output", type=Path, help="Results CSV (default: split-dir/experiments_<split>.csv)")
+    parser.add_argument("--artifacts-dir", type=Path, default=PROJECT_ROOT / "artifacts", help="Root directory for experiment runs")
+    parser.add_argument("--run-name", help="Run folder name (default: timestamp, split, and models)")
+    parser.add_argument("--output", type=Path, help="Override the results CSV path and run folder")
     parser.add_argument("--k-neighbors", type=int, default=50, help="Item KNN neighbors per item")
     parser.add_argument("--min-rating", type=float, default=5.0, help="Item KNN positive rating threshold (default: 5)")
     parser.add_argument("--train-quarters", type=int, default=8, help="Most recent training quarters for LightGBM")
@@ -137,7 +142,8 @@ def save_plots(results: pd.DataFrame, output: Path) -> tuple[Path, Path]:
         ax.set_title(title)
         ax.grid(alpha=0.2)
         if metric != "scored_users":
-            ax.set_ylim(0, 1)
+            peak = results[metric].max(skipna=True)
+            ax.set_ylim(0, min(1, max(0.01, peak * 1.2)))
         ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
     axes[0, 0].legend(loc="upper right", frameon=False)
@@ -153,7 +159,7 @@ def save_plots(results: pd.DataFrame, output: Path) -> tuple[Path, Path]:
     for i, name in enumerate(models):
         ax.bar(x - 0.4 + width * (i + 0.5), means.loc[name], width, label=name, color=colors[name])
     ax.set_xticks(x, METRICS)
-    ax.set_ylim(0, 1)
+    ax.set_ylim(0, min(1, max(0.01, means.max().max() * 1.2)))
     ax.set_ylabel("Mean across quarters")
     ax.set_title(f"Model comparison · {results['split'].iloc[0]}")
     ax.grid(axis="y", alpha=0.2)
@@ -185,9 +191,16 @@ def run(args):
     if not rows:
         raise ValueError(f"No {args.split} evaluation quarters in {args.split_dir}")
     results = pd.DataFrame(rows)
-    output = args.output or args.split_dir / f"experiments_{args.split}.csv"
-    output.parent.mkdir(parents=True, exist_ok=True)
+    if args.output is None:
+        run_name = args.run_name or f"{datetime.now().astimezone():%Y%m%d-%H%M%S-%f}_{args.split}_{'-'.join(dict.fromkeys(args.models))}"
+        output = args.artifacts_dir / run_name / "results.csv"
+        output.parent.mkdir(parents=True, exist_ok=False)
+    else:
+        output = args.output
+        output.parent.mkdir(parents=True, exist_ok=True)
     results.to_csv(output, index=False)
+    config = {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()}
+    (output.parent / "run_config.json").write_text(json.dumps(config, indent=2) + "\n")
     if not args.no_plots:
         plot_paths = save_plots(results, output)
         print(f"Saved charts: {plot_paths[0]}, {plot_paths[1]}")
