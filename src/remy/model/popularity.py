@@ -7,15 +7,15 @@ class Popularity:
         """
         Count all historical reviews, regardless of rating.
         Supervised models use training_quarters to build historical input/label pairs.
-        This model ignores that argument since we are not training on anything really.
+        This model ignores that argument since we are not training on anything.
         """
 
-        # count recipe reviews, recipes without reviews get a score of zero, optionally filter
+        # count recipe reviews, optionally filter to historical recipes, recipes without reviews get a score of zero
         counts = interactions["recipe_id"].value_counts()
         if recipes is not None:
             counts = counts.reindex(recipes["id"], fill_value=0)
 
-        self.scores_ = counts.sort_index().sort_values(ascending=False, kind="stable")
+        self.scores_ = counts.sort_index().sort_values(ascending=False, kind="stable") # breaks ties by recipe ID
         self.ranking_ = self.scores_.index.tolist()
         self.seen_ = interactions.groupby("user_id")["recipe_id"].agg(set).to_dict()
         return self
