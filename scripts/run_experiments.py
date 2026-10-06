@@ -9,8 +9,8 @@ Examples (after ``python scripts/make_splits.py``)::
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
 import json
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -19,7 +19,7 @@ import pandas as pd
 from remy.model.item_knn import ItemKNNRecommender
 from remy.model.popularity import Popularity
 from remy.paths import PROJECT_ROOT
-from remy.splits import RollingSplits, SPLIT_DIR
+from remy.splits import SPLIT_DIR, RollingSplits
 
 METRICS = ["NDCG", "HR@10", "HR@100", "Recall@10", "Recall@100"]
 
@@ -29,7 +29,9 @@ def parse_args(argv=None):
         description="Evaluate recommendation models on rolling quarterly splits.",
         epilog="Example: python scripts/run_experiments.py --models popularity item_knn --split val",
     )
-    parser.add_argument("--models", nargs="+", choices=("popularity", "item_knn", "lightgbm"), default=["popularity"], help="Models to compare (default: popularity)")
+    parser.add_argument(
+        "--models", nargs="+", choices=("popularity", "item_knn", "lightgbm"), default=["popularity"], help="Models to compare (default: popularity)"
+    )
     parser.add_argument("--split", choices=("val", "test"), default="val", help="Evaluation period (default: val)")
     parser.add_argument("--max-quarters", type=int, help="Score only the first N quarters, for a quick run")
     parser.add_argument("--split-dir", type=Path, default=SPLIT_DIR, help="Directory from make_splits.py")
@@ -175,7 +177,7 @@ def run(args):
     splits = RollingSplits(args.split_dir)
     quarters = splits.evaluation_quarters(args.split)
     if args.max_quarters is not None:
-        quarters = quarters[:args.max_quarters]
+        quarters = quarters[: args.max_quarters]
     rows = []
     for quarter in quarters:
         for name in dict.fromkeys(args.models):
