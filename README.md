@@ -63,7 +63,7 @@ src/remy/
     __init__.py
     popularity.py             # Past-review-count baseline
     item_knn.py               # Item-to-item cosine collaborative filtering
-    lightgbm_ranker.py        # LambdaRank reranker on user stats + recipe tags
+    lightgbm_new.py           # LightGBM reranker on user stats + recipe tags
   evaluate.py                 # Common metric-computing function
   splits.py                   # Shared quarterly training/evaluation data
 scripts/
@@ -85,41 +85,95 @@ interactions, recipe metadata, and 52 quarterly boundaries/counts to
 Training tasks cover 2003–2006, validation 2007–2010, and test 2011–2015.
 Earlier reviews remain history. The script's docstring explains the dates, rules, filtering, and labels.
 
-## Add a model
-
-Keep a plain class with `fit` and `recommend`:
-
-- `fit(interactions, recipes=None, training_quarters=())` returns `self`.
-  Supervised models build features from each training quarter's own history and recipes, and labels from its outcomes. Popularity counts past reviews.
-- `recommend(user_id, k=10)` returns ranked, distinct recipe IDs from the
-  available catalog, excluding that user's previously reviewed recipes.
-  Include recipes with no past reviews using a fallback score if necessary.
-
-Create a fresh model at every evaluation quarter. Fit using its history and completed earlier training quarters; use its outcomes only for scoring. Completed validation/test quarters become training history at later cutoffs. Choose settings on validation and keep them fixed throughout test. Keep `__init__.py` files empty; no base class or registry is needed.
-
 ## Run experiments
 
-After `python scripts/make_splits.py`, run one or more models on the common
-rolling quarters:
+After downloading the data, prepare the shared rolling-quarter inputs once:
 
 ```bash
-python scripts/run_experiments.py --models popularity item_knn --split val
-python scripts/run_experiments.py --models item_knn --split test --k-neighbors 50
-python scripts/run_experiments.py --models lightgbm --split val --max-quarters 2
+python scripts/make_splits.py
 ```
 
-The script fits a fresh model from each quarter's earlier history and scores
-5-star reviews in that quarter. LightGBM also trains on completed earlier
-quarters. It reports mean full-ranking NDCG, hit rate and recall at 10 and 100,
-plus candidate recall for models that score a subset before popularity fallback.
-Each run gets a unique folder under the repository-root `artifacts/` directory,
-containing `results.csv`, `run_config.json`, a quarterly trend chart, and a
-model comparison chart. Use `--run-name` to name that folder or
-`--artifacts-dir` to change its parent. Item KNN uses 5-star reviews as its
-positive signal by default; `--min-rating` overrides this. `--output` overrides
-the CSV path and saves plots beside it. Use `--no-plots` to skip chart
-generation and `--help` for all options. Choose model settings on validation before running
-test. On macOS, LightGBM may also need the OpenMP runtime (`libomp`) installed.
+Run supported models together on the same validation quarters:
+
+```bash
+python scripts/run_experiments.py --models popularity item_knn lightgbm --split val
+```
+
+Other useful commands:
+
+```bash
+# A short LightGBM run to inspect the first two validation quarters
+python scripts/run_experiments.py --models lightgbm --split val --max-quarters 2
+
+# Override the LightGBM shortlist and tree settings
+python scripts/run_experiments.py --models lightgbm --split val \
+  --lgbm-candidates 2000 --num-leaves 63 --min-data-in-leaf 50
+
+# After selecting settings on validation, use the same settings for test
+python scripts/run_experiments.py --models popularity item_knn lightgbm --split test
+```
+
+Model settings exposed by the runner are:
+
+| Model | Argument | Default | Meaning |
+| --- | --- | ---: | --- |
+| Item KNN | `--k-neighbors` | 50 | Neighbors retained per recipe |
+| Item KNN | `--min-rating` | 5 | Minimum rating treated as positive |
+| LightGBM | `--negative-samples-per-positive` | 10 | Sampled negatives per historical positive |
+| LightGBM | `--boost-rounds` | 200 | Number of boosting rounds |
+| LightGBM | `--lgbm-candidates` | 1000 | Popular recipes shortlisted for LightGBM to rank for each user |
+| LightGBM | `--learning-rate` | 0.05 | Boosting learning rate |
+| LightGBM | `--num-leaves` | 31 | Maximum leaves per tree |
+| LightGBM | `--min-data-in-leaf` | 100 | Minimum training rows per leaf |
+| LightGBM | `--seed` | 10718 | Random seed for negative sampling and LightGBM |
+
+LightGBM's negative-sampling, rounds, and shortlist defaults match
+`notebooks/rolling_lightgbm.ipynb`. It trains on all completed earlier training
+quarters available at each checkpoint. Run
+`python scripts/run_experiments.py --help` for the full argument list.
+
+Each run creates a unique folder under `artifacts/` with `results.csv`,
+`run_config.json`, a quarterly trend chart, a clustered hit-rate/recall chart,
+and a separate NDCG chart. The charts use the EDA notebook's background, mint,
+peach, and sand palette. Use `--run-name` to name the run folder,
+`--artifacts-dir` to change its parent, or `--output` to choose a CSV path and
+save charts beside it. `--no-plots` skips chart creation. Results report
+full-ranking NDCG, hit rate, and recall at 10 and 100, averaged across eligible
+users within each quarter; candidate recall is also reported for models that
+shortlist recipes before the popularity fallback. On macOS, LightGBM may need
+the OpenMP runtime (`libomp`) installed.
+
+## Add a model
+
+Implement the same small interface used by the experiment runner:
+
+```python
+fit(interactions, recipes=None, training_quarters=()) -> self
+recommend_many(user_ids, k=None) -> {user_id: [recipe_id, ...]}
+```
+
+- `interactions` is the current quarter's history, which includes all ratings
+  strictly before its start. `recipes` is the catalog available at that date.
+- `training_quarters` contains completed history/label tasks for supervised
+  models. Build each training example from that task's own history and labels;
+  do not use the evaluation quarter's outcomes during `fit`.
+- Store `ranking_`, a popularity-ordered list of all available recipe IDs, and
+  `seen_`, a mapping from users to previously reviewed recipe IDs. These let the
+  evaluator complete each model's short ranked candidate list with the same
+  unseen-popularity fallback.
+- `recommend_many` returns each requested user's distinct, unseen candidates in
+  rank order. Return `{}` when the model uses the shared global ranking directly
+  and has no separate candidate list, as the popularity baseline does.
+- Use `remy.evaluate.evaluate_quarter` for metrics. The runner fits a fresh
+  instance at every checkpoint and reports the mean of the per-user metrics for
+  that quarter.
+
+Register the class in `scripts/run_experiments.py`'s model choices and
+`make_model`, then add its options to the argument parser and document the
+defaults here. Keep model code in `src/remy/model/`, shared data preparation in
+`src/remy/splits.py`, and evaluation logic in `src/remy/evaluate.py`. Keep
+`__init__.py` files empty; no base class or model registry is needed. Choose
+settings on validation and keep them fixed through the test run.
 
 ## File paths
 

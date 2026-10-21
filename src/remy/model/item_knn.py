@@ -24,9 +24,9 @@ class ItemKNNRecommender:
         self.min_rating = min_rating
 
     def fit(
-        self, interactions: pd.DataFrame, *, recipes=None, training_quarters=(), asof=None
+        self, interactions: pd.DataFrame, recipes=None, training_quarters=()
     ) -> "ItemKNNRecommender":
-        history = interactions if asof is None else interactions[interactions["date"] < pd.Timestamp(asof)]
+        history = interactions
         catalog = (
             pd.Index(recipes["id"].unique()) if recipes is not None
             else pd.Index(history["recipe_id"].unique())
@@ -92,6 +92,20 @@ class ItemKNNRecommender:
             for i in order
             if scores.data[i] > 0 and self.idx_to_item_[scores.indices[i]] not in seen
         ]
+
+    def recommend_many(self, user_ids, k=None) -> dict[int, list[int]]:
+        """Return each user's collaborative-filter candidates in score order."""
+        if k is not None and k < 0:
+            raise ValueError("k must be nonnegative")
+        recommendations = {
+            user_id: self.recommend_candidates(user_id) for user_id in user_ids
+        }
+        if k is not None:
+            recommendations = {
+                user_id: candidates[:k]
+                for user_id, candidates in recommendations.items()
+            }
+        return recommendations
 
     def recommend(self, user_id: int, k: int = 10) -> list[int]:
         """Return up to k unseen items, using popularity after the CF scores."""

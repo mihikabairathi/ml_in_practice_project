@@ -20,6 +20,14 @@ class Popularity:
         self.seen_ = interactions.groupby("user_id")["recipe_id"].agg(set).to_dict()
         return self
 
+    def recommend_many(self, user_ids, k=None) -> dict[int, list[int]]:
+        """Return no reranking candidates; evaluation uses the global ranking."""
+        if not hasattr(self, "ranking_"):
+            raise RuntimeError("Call fit before recommend")
+        if k is not None and k < 0:
+            raise ValueError("k must be nonnegative")
+        return {}
+
     def recommend(self, user_id: int, k: int = 10) -> list[int]:
         """Return up to k available, unseen recipe IDs, most popular first."""
 

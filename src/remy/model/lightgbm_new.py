@@ -17,21 +17,34 @@ class LightGBMNew:
     sample random recipes that were available and unseen at the quarter start as
     negative examples.
 
-    At recommendation time the fitted model scores every available recipe the user has not previously reviewed. 
-    Recipe popularity is kept as a fallback for users with fewer than MIN_REVIEWS historical reviews.
+    At recommendation time the fitted model reranks a popularity shortlist of
+    available recipes the user has not previously reviewed. Recipe popularity
+    is the fallback for users with fewer than MIN_REVIEWS historical reviews.
     """
 
-    def __init__(self, negatives_per_positive=5, num_boost_round=200, n_candidates=1000, seed=10718):
+    def __init__(
+        self,
+        negatives_per_positive=10,
+        num_boost_round=200,
+        n_candidates=1000,
+        seed=10718,
+        learning_rate=0.05,
+        num_leaves=31,
+        min_data_in_leaf=100,
+    ):
         self.negatives_per_positive = negatives_per_positive
         self.num_boost_round = num_boost_round
         self.n_candidates = n_candidates
         self.seed = seed
+        self.learning_rate = learning_rate
+        self.num_leaves = num_leaves
+        self.min_data_in_leaf = min_data_in_leaf
         self.params = {
             "objective": "binary",
             "metric": "binary_logloss",
-            "learning_rate": 0.05,
-            "num_leaves": 31,
-            "min_data_in_leaf": 100,
+            "learning_rate": learning_rate,
+            "num_leaves": num_leaves,
+            "min_data_in_leaf": min_data_in_leaf,
             "verbosity": -1,
             "seed": seed
         }
@@ -127,6 +140,8 @@ class LightGBMNew:
         """
         if not hasattr(self, "model_"):
             raise RuntimeError("Call fit before recommend")
+        if k is not None and k < 0:
+            raise ValueError("k must be nonnegative")
         return {user_id: self._recommend_one(user_id, k) for user_id in user_ids}
 
     def _recommend_one(self, user_id: int, k=None) -> list[int]:
