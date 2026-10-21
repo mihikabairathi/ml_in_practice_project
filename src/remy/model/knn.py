@@ -2,30 +2,42 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 import numpy as np
 import pandas as pd
 from scipy import sparse
 from sklearn.preprocessing import normalize
 
 
-class ItemKNNRecommender:
+class KNNRecommender:
     """Cosine item neighbors, summed over a user's liked recipes.
 
     Only ratings at or above ``min_rating`` form the user-item matrix. All
-    historical reviews count as seen and contribute to the popularity fallback.
-    ``training_quarters`` is accepted for the shared model interface; this
-    unsupervised baseline learns directly from the current history.
+    historical reviews count as seen. At recommendation time, KNN and LightGBM
+    use the same top ``n_candidates`` popularity shortlist; KNN ranks that list
+    with collaborative-filter scores. ``k_neighbors`` controls the item graph,
+    not the number of recommendations. ``training_quarters`` is accepted for
+    the shared model interface; this baseline learns directly from current history.
     """
 
-    def __init__(self, k_neighbors: int = 50, min_rating: float = 5.0):
+    def __init__(
+        self,
+        k_neighbors: int = 50,
+        min_rating: float = 5.0,
+        n_candidates: int = 1000,
+    ):
         if k_neighbors < 1:
             raise ValueError("k_neighbors must be positive")
+        if n_candidates < 1:
+            raise ValueError("n_candidates must be positive")
         self.k_neighbors = k_neighbors
         self.min_rating = min_rating
+        self.n_candidates = n_candidates
 
     def fit(
         self, interactions: pd.DataFrame, recipes=None, training_quarters=()
-    ) -> "ItemKNNRecommender":
+    ) -> "KNNRecommender":
         history = interactions
         catalog = (
             pd.Index(recipes["id"].unique()) if recipes is not None
@@ -39,6 +51,7 @@ class ItemKNNRecommender:
             .sort_index().sort_values(ascending=False, kind="stable")
         )
         self.ranking_ = self.scores_.index.tolist()
+        self.candidates_ = self.ranking_[:self.n_candidates]
         self.seen_ = history.groupby("user_id")["recipe_id"].agg(set).to_dict()
         self.idx_to_item_ = catalog.to_numpy()
         self.item_to_idx_ = {item: i for i, item in enumerate(self.idx_to_item_)}
@@ -78,42 +91,47 @@ class ItemKNNRecommender:
             (data, indices, indptr), shape=matrix.shape, dtype=matrix.dtype
         )
 
-    def recommend_candidates(self, user_id: int) -> list[int]:
-        """Return every unseen item with a positive collaborative-filter score."""
+    def _candidate_ranking(self, user_id: int) -> list[int]:
+        """Rank the shared popularity shortlist by collaborative-filter score."""
         if not hasattr(self, "S_"):
             raise RuntimeError("Call fit before recommend")
-        if user_id not in self.user_to_idx_:
-            return []
-        scores = (self.R_[self.user_to_idx_[user_id]] @ self.S_).tocsr()
         seen = self.seen_.get(user_id, set())
-        order = np.lexsort((scores.indices, -scores.data))
-        return [
-            self.idx_to_item_[scores.indices[i]]
-            for i in order
-            if scores.data[i] > 0 and self.idx_to_item_[scores.indices[i]] not in seen
+        candidates = [
+            recipe_id for recipe_id in self.candidates_ if recipe_id not in seen
         ]
+        if user_id not in self.user_to_idx_:
+            return candidates
 
-    def recommend_many(self, user_ids, k=None) -> dict[int, list[int]]:
-        """Return each user's collaborative-filter candidates in score order."""
+        scores = (self.R_[self.user_to_idx_[user_id]] @ self.S_).tocsr()
+        score_by_item = dict(zip(scores.indices, scores.data))
+        candidate_scores = np.fromiter(
+            (
+                score_by_item.get(self.item_to_idx_[recipe_id], 0.0)
+                for recipe_id in candidates
+            ),
+            dtype=np.float32,
+            count=len(candidates),
+        )
+        # The candidate list starts in popularity order, so stable sorting
+        # keeps popularity as the tie-break for recipes with equal CF scores.
+        order = np.argsort(-candidate_scores, kind="stable")
+        return [candidates[i] for i in order]
+
+    def recommend(self, user_id: int, k: int | None = 10) -> list[int]:
+        """Return ranked unseen items, using popularity after CF candidates.
+
+        With ``k=None``, return the full shared popularity shortlist, ranked
+        by collaborative-filter scores. The evaluator appends the remaining
+        items in popularity order.
+        """
         if k is not None and k < 0:
-            raise ValueError("k must be nonnegative")
-        recommendations = {
-            user_id: self.recommend_candidates(user_id) for user_id in user_ids
-        }
-        if k is not None:
-            recommendations = {
-                user_id: candidates[:k]
-                for user_id, candidates in recommendations.items()
-            }
-        return recommendations
-
-    def recommend(self, user_id: int, k: int = 10) -> list[int]:
-        """Return up to k unseen items, using popularity after the CF scores."""
-        if k < 0:
             raise ValueError("k must be nonnegative")
         if k == 0:
             return []
-        result = self.recommend_candidates(user_id)[:k]
+        candidates = self._candidate_ranking(user_id)
+        if k is None:
+            return candidates
+        result = candidates[:k]
         chosen = set(result)
         seen = self.seen_.get(user_id, set())
         for recipe_id in self.ranking_:
@@ -122,3 +140,13 @@ class ItemKNNRecommender:
             if recipe_id not in seen and recipe_id not in chosen:
                 result.append(recipe_id)
         return result
+
+    def recommend_batch(
+        self, user_ids: Iterable[int], k: int | None = None
+    ) -> dict[int, list[int]]:
+        """Return candidate rankings for multiple users with one API call."""
+        if not hasattr(self, "S_"):
+            raise RuntimeError("Call fit before recommend_batch")
+        if k is not None and k < 0:
+            raise ValueError("k must be nonnegative")
+        return {user_id: self.recommend(user_id, k=k) for user_id in user_ids}

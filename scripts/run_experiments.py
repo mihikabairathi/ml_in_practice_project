@@ -2,7 +2,7 @@
 
 Examples (after ``python scripts/make_splits.py``)::
 
-    python scripts/run_experiments.py --models popularity item_knn --split val
+    python scripts/run_experiments.py --models popularity knn --split val
     python scripts/run_experiments.py --models lightgbm --split test --max-quarters 2
 """
 
@@ -13,31 +13,27 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from remy.evaluate import METRICS, evaluate_quarter
-from remy.model.item_knn import ItemKNNRecommender
-from remy.model.lightgbm_new import LightGBMNew
+from remy.model.knn import KNNRecommender
+from remy.model.lightgbm import LightGBM
 from remy.model.popularity import Popularity
 from remy.paths import PROJECT_ROOT
+from remy.plots import save_plots
 from remy.splits import SPLIT_DIR, RollingSplits
-
-BACKGROUND = "#EAEAEA"
-MINT, PEACH, SAND = "#94D8A1", "#E1C6BA", "#E4D6AB"
-MODEL_COLORS = {"popularity": MINT, "lightgbm": PEACH, "item_knn": SAND}
 
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Fit and evaluate recommenders on shared rolling quarterly splits.",
-        epilog="Example: python scripts/run_experiments.py --models popularity item_knn --split val",
+        epilog="Example: python scripts/run_experiments.py --models popularity knn --split val",
     )
     models = parser.add_argument_group("models and evaluation")
     models.add_argument(
         "--models",
         nargs="+",
-        choices=("popularity", "item_knn", "lightgbm"),
+        choices=("popularity", "knn", "lightgbm"),
         default=["popularity"],
         help="Models to compare (default: popularity)",
     )
@@ -57,18 +53,20 @@ def parse_args(argv=None):
     paths.add_argument("--output", type=Path, help="Write the results CSV at this path instead of creating a run folder")
     paths.add_argument("--no-plots", action="store_true", help="Skip saving PNG charts")
 
-    knn = parser.add_argument_group("item KNN settings")
+    knn = parser.add_argument_group("KNN settings")
     knn.add_argument("--k-neighbors", type=int, default=50, help="Neighbors retained per recipe (default: 50)")
     knn.add_argument("--min-rating", type=float, default=5.0, help="Minimum rating treated as positive (default: 5)")
+
+    candidates = parser.add_argument_group("Candidate shortlist settings")
+    candidates.add_argument(
+        "--n-candidates", type=int, default=1000,
+        help="Popular recipes shortlisted for KNN and LightGBM (default: 1000)",
+    )
 
     lgbm = parser.add_argument_group("LightGBM settings")
     lgbm.add_argument(
         "--negative-samples-per-positive", type=int, default=10,
         help="Sampled negatives per training positive (default: 10, matching rolling_lightgbm.ipynb)",
-    )
-    lgbm.add_argument(
-        "--lgbm-candidates", type=int, default=1000,
-        help="Popular recipes shortlisted for LightGBM to rank per user (default: 1000)",
     )
     lgbm.add_argument("--boost-rounds", type=int, default=200, help="LightGBM boosting rounds (default: 200)")
     lgbm.add_argument("--learning-rate", type=float, default=0.05, help="LightGBM learning rate (default: 0.05)")
@@ -79,7 +77,7 @@ def parse_args(argv=None):
     args = parser.parse_args(argv)
     positive_args = (
         "max_quarters", "k_neighbors", "negative_samples_per_positive",
-        "lgbm_candidates", "boost_rounds", "num_leaves", "min_data_in_leaf",
+        "n_candidates", "boost_rounds", "num_leaves", "min_data_in_leaf",
     )
     for name in positive_args:
         value = getattr(args, name)
@@ -93,150 +91,23 @@ def parse_args(argv=None):
 def make_model(name, args):
     if name == "popularity":
         return Popularity()
-    if name == "item_knn":
-        return ItemKNNRecommender(args.k_neighbors, args.min_rating)
+    if name == "knn":
+        return KNNRecommender(
+            k_neighbors=args.k_neighbors,
+            min_rating=args.min_rating,
+            n_candidates=args.n_candidates,
+        )
     if name == "lightgbm":
-        return LightGBMNew(
+        return LightGBM(
             negatives_per_positive=args.negative_samples_per_positive,
             num_boost_round=args.boost_rounds,
-            n_candidates=args.lgbm_candidates,
+            n_candidates=args.n_candidates,
             seed=args.seed,
             learning_rate=args.learning_rate,
             num_leaves=args.num_leaves,
             min_data_in_leaf=args.min_data_in_leaf,
         )
     raise ValueError(f"Unknown model: {name}")
-
-
-def _style_axes(ax):
-    ax.set_axisbelow(True)
-    ax.grid(axis="y", color="white", linewidth=1.1)
-    ax.tick_params(axis="both", length=0, pad=7, colors="#555555")
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color("#777777")
-    ax.spines["bottom"].set_color("#777777")
-    ax.yaxis.label.set_color("#333333")
-    ax.xaxis.label.set_color("#333333")
-    ax.title.set_color("#333333")
-
-
-def save_plots(results: pd.DataFrame, output: Path) -> list[Path]:
-    """Save styled quarterly trends and clustered metric comparisons."""
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.dates as mdates
-    import matplotlib.pyplot as plt
-    from cycler import cycler
-    from matplotlib.ticker import FuncFormatter, MaxNLocator, PercentFormatter
-
-    models = list(results["model"].drop_duplicates())
-    colors = {name: MODEL_COLORS[name] for name in models}
-    palette = [MINT, PEACH, SAND]
-    saved = []
-
-    with plt.rc_context({
-        "figure.facecolor": BACKGROUND,
-        "axes.facecolor": BACKGROUND,
-        "savefig.facecolor": BACKGROUND,
-        "axes.prop_cycle": cycler(color=palette),
-        "font.size": 11,
-        "axes.titlesize": 13,
-        "axes.titleweight": "semibold",
-        "axes.titlelocation": "left",
-        "axes.titlepad": 14,
-        "axes.labelpad": 9,
-        "legend.frameon": False,
-        "legend.fontsize": 10,
-    }):
-        trend_metrics = [
-            ("NDCG", "Full-ranking NDCG", True),
-            ("HR@10", "Hit rate @10", True),
-            ("Recall@10", "Recall @10", True),
-        ]
-        if results["candidate_recall"].notna().any():
-            trend_metrics.append(("candidate_recall", "Candidate recall", True))
-        else:
-            trend_metrics.append(("scored_users", "Scored users", False))
-
-        fig, axes = plt.subplots(2, 2, figsize=(11, 7.5), sharex=True, layout="constrained")
-        for ax, (metric, title, is_rate) in zip(axes.flat, trend_metrics):
-            _style_axes(ax)
-            for name in models:
-                frame = results.loc[results["model"] == name].sort_values("start")
-                if frame[metric].notna().any():
-                    ax.plot(
-                        frame["start"], frame[metric], marker="o", linewidth=2.2,
-                        label=name, color=colors[name],
-                    )
-            ax.set_title(title)
-            ax.yaxis.set_major_locator(MaxNLocator(nbins=5, integer=not is_rate))
-            if is_rate:
-                peak = results[metric].max(skipna=True)
-                ax.set_ylim(0, min(1, max(0.01, peak * 1.35)))
-                ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
-            else:
-                ax.set_ylim(bottom=0)
-                ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:,.0f}"))
-            locator = mdates.AutoDateLocator(minticks=4, maxticks=8)
-            ax.xaxis.set_major_locator(locator)
-            ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
-            ax.set_xlabel("Quarter start" if ax.get_subplotspec().is_last_row() else "")
-        axes[0, 0].legend(loc="upper right")
-        fig.suptitle(f"Rolling {results['split'].iloc[0]} performance", fontsize=16)
-        trend_path = output.with_name(f"{output.stem}_quarters.png")
-        fig.savefig(trend_path, dpi=160)
-        plt.close(fig)
-        saved.append(trend_path)
-
-        means = results.groupby("model")[METRICS].mean().reindex(models)
-
-        def comparison_chart(metrics, title, filename, figsize):
-            scores = means.loc[:, metrics]
-            positions = np.arange(len(metrics))
-            width = 0.8 / len(models)
-            fig, ax = plt.subplots(figsize=figsize, layout="constrained")
-            for index, name in enumerate(models):
-                offset = (index - (len(models) - 1) / 2) * width
-                bars = ax.bar(
-                    positions + offset,
-                    scores.loc[name].to_numpy(),
-                    width,
-                    label=name,
-                    color=colors[name],
-                    edgecolor="#777777",
-                    linewidth=0.6,
-                )
-                ax.bar_label(bars, fmt="%.4f", padding=5, fontsize=9)
-            _style_axes(ax)
-            ax.set_title(title)
-            ax.set_xlabel("Metric")
-            ax.set_xticks(positions, metrics)
-            ax.set_xlim(-0.6, len(metrics) - 0.4)
-            ax.set_ylim(0, max(0.01, scores.to_numpy().max() * 1.35))
-            ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
-            ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:.2f}"))
-            ax.legend(loc="upper right")
-            chart_path = output.with_name(filename)
-            fig.savefig(chart_path, dpi=160)
-            plt.close(fig)
-            saved.append(chart_path)
-
-        comparison_chart(
-            ["HR@10", "HR@100", "Recall@10", "Recall@100"],
-            f"Hit rate and recall · {results['split'].iloc[0]}",
-            f"{output.stem}_hit_recall.png",
-            (10, 5),
-        )
-        comparison_chart(
-            ["NDCG"],
-            f"NDCG · {results['split'].iloc[0]}",
-            f"{output.stem}_ndcg.png",
-            (6, 5),
-        )
-
-    return saved
 
 
 def run(args):
@@ -259,16 +130,25 @@ def run(args):
             )
             positives = quarter.outcomes.loc[quarter.outcomes["rating"] == 5]
             user_ids = positives["user_id"].unique()
-            recommendations = model.recommend_many(user_ids)
+            # The evaluator can use popularity's global ranking directly,
+            # filtering seen recipes without building per-user recommendation lists.
+            recommendations = (
+                None if name == "popularity"
+                else model.recommend_batch(user_ids, k=None)
+            )
             row = evaluate_quarter(
-                quarter, model.ranking_, model.seen_, recommendations
+                quarter,
+                model.ranking_,
+                model.seen_,
+                recommendations,
+                candidate_k=args.n_candidates,
             )
             row["model"] = name
             row["split"] = args.split
             rows.append(row)
             print(
                 f"{name:12s} {quarter.start.date()}  "
-                f"NDCG={row['NDCG']:.4f}  HR@10={row['HR@10']:.4f}",
+                f"NDCG={row['NDCG']:.3f}  HR@10={row['HR@10']:.3f}",
                 flush=True,
             )
 
@@ -297,7 +177,8 @@ def run(args):
         plot_paths = save_plots(results, output)
         print("Saved charts: " + ", ".join(map(str, plot_paths)))
 
-    print(f"\nMean across quarters:\n{results.groupby('model')[METRICS + ['candidate_recall']].mean().round(4).to_string()}")
+    summary = results.groupby("model")[METRICS].mean().round(3)
+    print(f"\nMean across quarters:\n{summary.to_string()}")
     print(f"\nSaved {output}")
     return results
 

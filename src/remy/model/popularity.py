@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 import pandas as pd
 
 class Popularity:
@@ -20,18 +22,10 @@ class Popularity:
         self.seen_ = interactions.groupby("user_id")["recipe_id"].agg(set).to_dict()
         return self
 
-    def recommend_many(self, user_ids, k=None) -> dict[int, list[int]]:
-        """Return no reranking candidates; evaluation uses the global ranking."""
-        if not hasattr(self, "ranking_"):
-            raise RuntimeError("Call fit before recommend")
-        if k is not None and k < 0:
-            raise ValueError("k must be nonnegative")
-        return {}
-
-    def recommend(self, user_id: int, k: int = 10) -> list[int]:
+    def recommend(self, user_id: int, k: int | None = 10) -> list[int]:
         """Return up to k available, unseen recipe IDs, most popular first."""
 
-        if k < 0:
+        if k is not None and k < 0:
             raise ValueError("k must be nonnegative")
         if not hasattr(self, "ranking_"):
             raise RuntimeError("Call fit before recommend")
@@ -39,9 +33,19 @@ class Popularity:
         result = []
         seen = self.seen_.get(user_id, set())
         for recipe_id in self.ranking_:
-            if len(result) == k:
+            if k is not None and len(result) == k:
                 break
             if recipe_id not in seen:
                 result.append(recipe_id)
 
         return result
+
+    def recommend_batch(
+        self, user_ids: Iterable[int], k: int | None = None
+    ) -> dict[int, list[int]]:
+        """Return each user's unseen recipes in popularity order."""
+        if not hasattr(self, "ranking_"):
+            raise RuntimeError("Call fit before recommend_batch")
+        if k is not None and k < 0:
+            raise ValueError("k must be nonnegative")
+        return {user_id: self.recommend(user_id, k=k) for user_id in user_ids}
