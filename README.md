@@ -56,6 +56,7 @@ notebooks/
   eda.ipynb                   # Exploration and plots
   rolling_popularity.ipynb    # Training and evaluation for the popularity model
   rolling_lightgbm.ipynb      # Training and evaluation for the LightGBM model
+  rolling_embedding.ipynb     # Experiments and evaluation for the embedding model
 src/remy/
   __init__.py
   paths.py                    # Shared PROJECT_ROOT path
@@ -63,11 +64,13 @@ src/remy/
     __init__.py
     popularity.py             # Past-review-count baseline
     lightgbm_ranker.py        # LambdaRank reranker on user stats + recipe tags
+    embedding.py              # Similarity of popular recipes to users' liked recipes
   evaluate.py                 # Common metric-computing function
   splits.py                   # Shared quarterly training/evaluation data
 scripts/
   download_data.py            # CSV to Parquet
   make_splits.py              # Save the common quarterly split data
+  embed_recipes.py            # Save recipe sentence embeddings + numeric features
 pyproject.toml                # Shared dependencies and package configuration
 ```
 
@@ -82,6 +85,14 @@ interactions, recipe metadata, and 52 quarterly boundaries/counts to
 
 Training tasks cover 2003–2006, validation 2007–2010, and test 2011–2015.
 Earlier reviews remain history. The script's docstring explains the dates, rules, filtering, and labels.
+
+## Embedding recommender
+
+Run `python scripts/embed_recipes.py --device mps --batch-size 16` once, then run
+`notebooks/rolling_embedding.ipynb`. It compares 17 settings on all 16 validation
+quarters using 10,000 candidates. It does not select a final model or run test quarters.
+Change the main parameters in the notebook's `baseline` and `experiments` dictionaries;
+`DESCRIPTION_WORDS` is in the embedding script. Generated files are ignored by Git.
 
 ## Add a model
 
