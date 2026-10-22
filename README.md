@@ -56,12 +56,16 @@ notebooks/
   eda.ipynb                   # Exploration and plots
   rolling_popularity.ipynb    # Training and evaluation for the popularity model
   rolling_lightgbm.ipynb      # Training and evaluation for the LightGBM model
+  rolling_embedding.ipynb     # Frozen embedding evaluation
+  rolling_embedding_training.ipynb # Trained scoring over frozen inputs
 src/remy/
   __init__.py
   paths.py                    # Shared PROJECT_ROOT path
   model/
     __init__.py
     popularity.py             # Past-review-count baseline
+    embedding.py              # Frozen embedding recommendation
+    embedding_trained.py      # Learned linear/nonlinear scoring
     knn.py                    # Item-to-item cosine collaborative filtering
     lightgbm.py               # LightGBM reranker on user stats + recipe tags
   evaluate.py                 # Common metric-computing function
@@ -70,6 +74,7 @@ src/remy/
 scripts/
   download_data.py            # CSV to Parquet
   make_splits.py              # Save the common quarterly split data
+  embed_recipes.py            # Save MiniLM or TF-IDF recipe inputs
   run_experiments.py          # Compare models on rolling validation/test tasks
 pyproject.toml                # Shared dependencies and package configuration
 ```
@@ -85,6 +90,10 @@ interactions, recipe metadata, and 52 quarterly boundaries/counts to
 
 Training tasks cover 2003–2006, validation 2007–2010, and test 2011–2015.
 Earlier reviews remain history. The script's docstring explains the dates, rules, filtering, and labels.
+
+## Embedding recommender
+
+Generate inputs once with `python scripts/embed_recipes.py --device mps` (or `--kind tfidf` for TF-IDF). Run `notebooks/rolling_embedding.ipynb` for frozen similarity or `notebooks/rolling_embedding_training.ipynb` for trained scoring. Edit `model_kwargs` in the notebook, then run its cells for all 16 validation quarters.
 
 ## Run experiments
 
