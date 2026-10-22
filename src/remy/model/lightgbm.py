@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
@@ -8,7 +10,7 @@ from remy.splits import MIN_REVIEWS
 USER_FEATURES = ["user_n_reviews", "user_mean_rating", "user_pos_rate"]
 
 
-class LightGBMNew:
+class LightGBM:
     """
     Simple LightGBM baseline using user statistics and binary recipe tags.
 
@@ -17,26 +19,39 @@ class LightGBMNew:
     sample random recipes that were available and unseen at the quarter start as
     negative examples.
 
-    At recommendation time the fitted model scores every available recipe the user has not previously reviewed. 
-    Recipe popularity is kept as a fallback for users with fewer than MIN_REVIEWS historical reviews.
+    At recommendation time the fitted model reranks a popularity shortlist of
+    available recipes the user has not previously reviewed. Recipe popularity
+    is the fallback for users with fewer than MIN_REVIEWS historical reviews.
     """
 
-    def __init__(self, negatives_per_positive=5, num_boost_round=200, n_candidates=1000, seed=10718):
+    def __init__(
+        self,
+        negatives_per_positive=10,
+        num_boost_round=200,
+        n_candidates=1000,
+        seed=10718,
+        learning_rate=0.05,
+        num_leaves=31,
+        min_data_in_leaf=100,
+    ):
         self.negatives_per_positive = negatives_per_positive
         self.num_boost_round = num_boost_round
         self.n_candidates = n_candidates
         self.seed = seed
+        self.learning_rate = learning_rate
+        self.num_leaves = num_leaves
+        self.min_data_in_leaf = min_data_in_leaf
         self.params = {
             "objective": "binary",
             "metric": "binary_logloss",
-            "learning_rate": 0.05,
-            "num_leaves": 31,
-            "min_data_in_leaf": 100,
+            "learning_rate": learning_rate,
+            "num_leaves": num_leaves,
+            "min_data_in_leaf": min_data_in_leaf,
             "verbosity": -1,
             "seed": seed
         }
 
-    def fit(self, interactions: pd.DataFrame, recipes=None, training_quarters=()) -> "LightGBMNew":
+    def fit(self, interactions: pd.DataFrame, recipes=None, training_quarters=()) -> "LightGBM":
         """
         Fit from completed historical quarters and store the current state.
 
@@ -119,17 +134,16 @@ class LightGBMNew:
 
         return self
 
-    def recommend_many(self, user_ids, k=None) -> dict[int, list[int]]:
-        """
-        Rank the shortlisted unseen recipes for each requested user.
-        For users with fewer than MIN_REVIEWS historical reviews, return the
-        popularity fallback instead of running LightGBM.
+    def recommend(self, user_id: int, k: int | None = 10) -> list[int]:
+        """Rank shortlisted unseen recipes for one user.
+
+        Users with fewer than ``MIN_REVIEWS`` historical reviews receive the
+        popularity fallback. With ``k=None``, return the full ranked shortlist.
         """
         if not hasattr(self, "model_"):
             raise RuntimeError("Call fit before recommend")
-        return {user_id: self._recommend_one(user_id, k) for user_id in user_ids}
-
-    def _recommend_one(self, user_id: int, k=None) -> list[int]:
+        if k is not None and k < 0:
+            raise ValueError("k must be nonnegative")
         seen = self.seen_.get(user_id, set())
         unseen = [recipe_id for recipe_id in self.candidates_ if recipe_id not in seen]
 
@@ -140,6 +154,16 @@ class LightGBMNew:
             scores = self.model_.predict(self._features(pairs, self.user_features_))
             ranked = [unseen[i] for i in np.lexsort((np.asarray(unseen), -scores))]
         return ranked if k is None else ranked[:k]
+
+    def recommend_batch(
+        self, user_ids: Iterable[int], k: int | None = None
+    ) -> dict[int, list[int]]:
+        """Return LightGBM candidate rankings for a batch of users."""
+        if not hasattr(self, "model_"):
+            raise RuntimeError("Call fit before recommend_batch")
+        if k is not None and k < 0:
+            raise ValueError("k must be nonnegative")
+        return {user_id: self.recommend(user_id, k=k) for user_id in user_ids}
 
     @staticmethod
     def _user_features(history):
