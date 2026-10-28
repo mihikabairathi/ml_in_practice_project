@@ -68,6 +68,8 @@ src/remy/
     embedding_trained.py      # Learned linear/nonlinear scoring
     knn.py                    # Item-to-item cosine collaborative filtering
     lightgbm.py               # LightGBM reranker on user stats + recipe tags
+    llm.py                    # Zero-shot LLM picks 10 recipes from a popularity shortlist
+    llm_prompts.py            # Prompt text for llm.py
   evaluate.py                 # Common metric-computing function
   plots.py                    # Saved experiment charts
   splits.py                   # Shared quarterly training/evaluation data
@@ -76,6 +78,7 @@ scripts/
   make_splits.py              # Save the common quarterly split data
   embed_recipes.py            # Save MiniLM or TF-IDF recipe inputs
   run_experiments.py          # Compare models on rolling validation/test tasks
+  run_llm_baseline.py         # Zero-shot LLM baseline on val + test (GPU)
 pyproject.toml                # Shared dependencies and package configuration
 ```
 
@@ -206,3 +209,23 @@ recipes_path = PROJECT_ROOT / "data" / "processed" / "recipes.parquet"
 
 This resolves from the source file, so it does not depend on the working
 directory. Use the editable installation described above.
+
+## Zero-shot LLM baseline
+
+`remy.model.llm.LLMRecommender` shows an instruct LLM (default `Qwen/Qwen3-8B`) the
+200 most-reviewed recipes a user has not reviewed yet, plus their 30 most recent
+4-5 star recipes, and asks for 10 recipe IDs. Guided decoding forces valid JSON
+with IDs from that list. Nothing is trained. The prompts live in
+`src/remy/model/llm_prompts.py`.
+
+It needs a CUDA GPU (one 48GB L40S is plenty) and vLLM:
+
+```bash
+python -m pip install -e ".[llm]"
+python scripts/run_llm_baseline.py --run-dir artifacts/llm_baseline
+```
+
+A full val + test run takes roughly 1-2 GPU hours with Qwen3-8B. Rerunning with the
+same `--run-dir` resumes after the last finished quarter. Only 10 recipes are
+returned per user, so compare models on HR@10, Recall@10 and NDCG@10; the @100
+and full-NDCG numbers mostly reflect the popularity fallback after those 10.

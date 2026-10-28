@@ -10,9 +10,9 @@ import pandas as pd
 from remy.evaluate import METRICS
 
 BACKGROUND = "#EAEAEA"
-MINT, PEACH, SAND = "#94D8A1", "#E1C6BA", "#E4D6AB"
-MODEL_COLORS = {"popularity": MINT, "lightgbm": PEACH, "knn": SAND}
-MODEL_LABELS = {"popularity": "Popularity", "lightgbm": "LGBM", "knn": "KNN"}
+MINT, PEACH, SAND, SKY = "#94D8A1", "#E1C6BA", "#E4D6AB", "#A9C8E8"
+MODEL_COLORS = {"popularity": MINT, "lightgbm": PEACH, "knn": SAND, "llm": SKY}
+MODEL_LABELS = {"popularity": "Popularity", "lightgbm": "LGBM", "knn": "KNN", "llm": "LLM"}
 
 
 def _style_axes(ax):
