@@ -24,6 +24,10 @@ dependencies = [
     "transformers>=4.51,<6",
 ]
 
+[project.optional-dependencies]
+# Zero-shot LLM baseline (remy.model.llm); needs a CUDA GPU.
+llm = ["vllm>=0.12"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 namespaces = false
