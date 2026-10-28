@@ -74,6 +74,9 @@ class LLMRecommender:
 
     def prompt(self, user_id: int, candidates: list[int], user_history: pd.DataFrame) -> list[dict]:
         """Chat messages for one user (see remy.model.llm_prompts)."""
+        # A few reviews predate their recipe's listed submission date, so the
+        # recipe is missing from this quarter's catalog; leave those out.
+        user_history = user_history[user_history["recipe_id"].isin(self.recipes_.index)]
         liked = user_history[user_history["rating"] >= 4]
         if liked.empty:  # e.g. a user who only left low or unrated reviews
             liked = user_history
