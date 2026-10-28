@@ -225,7 +225,7 @@ python -m pip install -e ".[llm]"
 python scripts/run_llm_baseline.py --run-dir artifacts/llm_baseline
 ```
 
-A full val + test run takes roughly 1-2 GPU hours with Qwen3-8B. Rerunning with the
+A full val + test run takes roughly 8-10 GPU hours with Qwen3-8B on one L40S. Rerunning with the
 same `--run-dir` resumes after the last finished quarter. Only 10 recipes are
 returned per user, so compare models on HR@10, Recall@10 and NDCG@10; the @100
 and full-NDCG numbers mostly reflect the popularity fallback after those 10.
