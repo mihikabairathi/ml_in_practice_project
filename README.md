@@ -127,7 +127,7 @@ Model settings exposed by the runner are:
 
 | Model | Argument | Default | Meaning |
 | --- | --- | ---: | --- |
-| KNN and LightGBM | `--n-candidates` | 1000 | Popular recipes shared as the candidate shortlist |
+| KNN, LightGBM, and embeddings | `--n-candidates` | 1000 | Popular recipes shared as the candidate shortlist |
 | KNN | `--k-neighbors` | 50 | Similar recipes retained per recipe in the item graph |
 | KNN | `--min-rating` | 5 | Minimum rating treated as positive |
 | LightGBM | `--negative-samples-per-positive` | 10 | Sampled negatives per historical positive |
@@ -136,10 +136,20 @@ Model settings exposed by the runner are:
 | LightGBM | `--num-leaves` | 31 | Maximum leaves per tree |
 | LightGBM | `--min-data-in-leaf` | 100 | Minimum training rows per leaf |
 | LightGBM | `--seed` | 10718 | Random seed for negative sampling and LightGBM |
+| Frozen embedding | `--embedding-method` | `centered` | Similarity method (`centered`, `tfidf`, `top3`, or `plain`) |
+| Trained embedding | `--embedding-variant` | `softmax` | Input/loss variant (`baseline`, `softmax`, `separate_fields`, or `tfidf`) |
+| Trained embedding | `--embedding-architecture` | `nonlinear` | Scorer architecture (`linear` or `nonlinear`) |
+| Trained embedding | `--embedding-width` | 128 | Hidden width for nonlinear towers |
+| Trained embedding | `--embedding-epochs` | 15 | Training epochs |
+| Trained embedding | `--embedding-batch-size` | 512 | Training batch size |
+| Trained embedding | `--embedding-learning-rate` | 0.001 | Optimizer learning rate |
 
 LightGBM's negative-sampling, rounds, and shortlist defaults match
 `notebooks/rolling_lightgbm.ipynb`. It trains on all completed earlier training
-quarters available at each checkpoint. Run
+quarters available at each checkpoint. The embedding defaults mirror
+`notebooks/rolling_embedding.ipynb` and
+`notebooks/rolling_embedding_training.ipynb`; trained embedding models also use
+the shared `--seed` setting (10718). Run
 `python scripts/run_experiments.py --help` for the full argument list.
 KNN and LightGBM use the same popularity-ordered candidate shortlist. KNN ranks
 those candidates by collaborative-filter score; `--k-neighbors` controls how
@@ -149,14 +159,16 @@ Each run creates a unique folder under `artifacts/` with `results.csv`,
 `run_config.json`, a quarterly trend chart, a clustered hit-rate/recall chart,
 and a two-panel clustered metric chart with hit rate and recall beside NDCG.
 The charts use the EDA notebook's background, mint, peach, and sand palette,
-with no gridlines. Use `--run-name` to name the run folder,
+with soft blue and lavender accents for the two embedding models and no
+gridlines. Use `--run-name` to name the run folder,
 `--artifacts-dir` to change its parent, or `--output` to choose a CSV path and
 save charts beside it. `--no-plots` skips chart creation. Results report
 full-ranking NDCG, NDCG at the shared candidate cutoff, hit rate, and recall at
 10 and 100. The shared cutoff is `--n-candidates` (1,000 by default) for every
 model, including Popularity. Scores are averaged across users with a 5-star
-outcome within each quarter. On macOS, LightGBM may need
-the OpenMP runtime (`libomp`) installed.
+outcome within each quarter. On macOS, when LightGBM and trained embeddings run
+together, the runner limits OpenMP to one thread to avoid a PyTorch/LightGBM
+runtime conflict.
 
 ## Add a model
 

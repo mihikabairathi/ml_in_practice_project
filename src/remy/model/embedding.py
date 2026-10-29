@@ -111,7 +111,8 @@ class EmbeddingRecommender:
         values = self.candidate_vectors_ @ profile
         return np.where(self.candidate_vectors_.any(axis=1) & profile.any(), values, np.nan)
 
-    def recommend_many(self, user_ids, k=None):
+    def recommend_batch(self, user_ids, k=None):
+        """Return ranked recommendations for a batch of users."""
         if k is not None and k < 0:
             raise ValueError('k must be nonnegative')
         recommendations = {}

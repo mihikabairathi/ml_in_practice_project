@@ -11,8 +11,21 @@ from remy.evaluate import METRICS
 
 BACKGROUND = "#EAEAEA"
 MINT, PEACH, SAND = "#94D8A1", "#E1C6BA", "#E4D6AB"
-MODEL_COLORS = {"popularity": MINT, "lightgbm": PEACH, "knn": SAND}
-MODEL_LABELS = {"popularity": "Popularity", "lightgbm": "LGBM", "knn": "KNN"}
+BLUE, LAVENDER = "#B8CEDB", "#C9BEDA"
+MODEL_COLORS = {
+    "popularity": MINT,
+    "lightgbm": PEACH,
+    "knn": SAND,
+    "embedding": BLUE,
+    "embedding_trained": LAVENDER,
+}
+MODEL_LABELS = {
+    "popularity": "Popularity",
+    "lightgbm": "LGBM",
+    "knn": "KNN",
+    "embedding": "Embedding",
+    "embedding_trained": "Trained embedding",
+}
 
 
 def _style_axes(ax):
@@ -40,7 +53,7 @@ def save_plots(results: pd.DataFrame, output: Path) -> list[Path]:
 
     models = list(results["model"].drop_duplicates())
     colors = {name: MODEL_COLORS[name] for name in models}
-    palette = [MINT, PEACH, SAND]
+    palette = [MINT, PEACH, SAND, BLUE, LAVENDER]
     saved = []
 
     with plt.rc_context({

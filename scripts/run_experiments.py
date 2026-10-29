@@ -10,14 +10,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from datetime import datetime
 from pathlib import Path
+
+# On macOS, LightGBM and PyTorch wheels can load separate OpenMP runtimes and
+# segfault when both are used in the same process. Limit OpenMP for this mixed
+# run before importing NumPy, SciPy, scikit-learn, LightGBM, or PyTorch.
+if sys.platform == "darwin" and "lightgbm" in sys.argv and "embedding_trained" in sys.argv:
+    os.environ["OMP_NUM_THREADS"] = "1"
 
 import pandas as pd
 
 from remy.evaluate import METRICS, evaluate_quarter
+from remy.model.embedding import EmbeddingRecommender, load_embeddings
 from remy.model.knn import KNNRecommender
-from remy.model.lightgbm import LightGBM
 from remy.model.popularity import Popularity
 from remy.paths import PROJECT_ROOT
 from remy.plots import save_plots
@@ -33,16 +41,19 @@ def parse_args(argv=None):
     models.add_argument(
         "--models",
         nargs="+",
-        choices=("popularity", "knn", "lightgbm"),
+        choices=("popularity", "knn", "lightgbm", "embedding", "embedding_trained"),
         default=["popularity"],
         help="Models to compare (default: popularity)",
     )
     models.add_argument(
-        "--split", choices=("val", "test"), default="val",
+        "--split",
+        choices=("val", "test"),
+        default="val",
         help="Rolling evaluation period (default: val)",
     )
     models.add_argument(
-        "--max-quarters", type=int,
+        "--max-quarters",
+        type=int,
         help="Score only the first N quarters, for a shorter run",
     )
 
@@ -59,25 +70,71 @@ def parse_args(argv=None):
 
     candidates = parser.add_argument_group("Candidate shortlist settings")
     candidates.add_argument(
-        "--n-candidates", type=int, default=1000,
+        "--n-candidates",
+        type=int,
+        default=1000,
         help="Popular recipes shortlisted for KNN and LightGBM (default: 1000)",
     )
 
     lgbm = parser.add_argument_group("LightGBM settings")
     lgbm.add_argument(
-        "--negative-samples-per-positive", type=int, default=10,
+        "--negative-samples-per-positive",
+        type=int,
+        default=10,
         help="Sampled negatives per training positive (default: 10, matching rolling_lightgbm.ipynb)",
     )
     lgbm.add_argument("--boost-rounds", type=int, default=200, help="LightGBM boosting rounds (default: 200)")
     lgbm.add_argument("--learning-rate", type=float, default=0.05, help="LightGBM learning rate (default: 0.05)")
     lgbm.add_argument("--num-leaves", type=int, default=31, help="Maximum LightGBM leaves per tree (default: 31)")
     lgbm.add_argument("--min-data-in-leaf", type=int, default=100, help="Minimum rows per LightGBM leaf (default: 100)")
-    lgbm.add_argument("--seed", type=int, default=10718, help="Random seed for LightGBM sampling (default: 10718)")
+    lgbm.add_argument(
+        "--seed",
+        type=int,
+        default=10718,
+        help="Random seed for LightGBM and trained embeddings (default: 10718)",
+    )
+
+    embedding = parser.add_argument_group("Embedding settings")
+    embedding.add_argument(
+        "--embedding-method",
+        choices=("centered", "tfidf", "top3", "plain"),
+        default="centered",
+        help="Frozen embedding ranking method (default: centered)",
+    )
+    embedding.add_argument(
+        "--embedding-variant",
+        choices=("baseline", "softmax", "separate_fields", "tfidf"),
+        default="softmax",
+        help="Trained embedding inputs and loss variant (default: softmax)",
+    )
+    embedding.add_argument(
+        "--embedding-architecture",
+        choices=("linear", "nonlinear"),
+        default="nonlinear",
+        help="Trained embedding scorer (default: nonlinear)",
+    )
+    embedding.add_argument("--embedding-width", type=int, default=128, help="Embedding tower width (default: 128)")
+    embedding.add_argument("--embedding-epochs", type=int, default=15, help="Training epochs (default: 15)")
+    embedding.add_argument("--embedding-batch-size", type=int, default=512, help="Training batch size (default: 512)")
+    embedding.add_argument(
+        "--embedding-learning-rate",
+        type=float,
+        default=0.001,
+        help="Embedding optimizer learning rate (default: 0.001)",
+    )
 
     args = parser.parse_args(argv)
     positive_args = (
-        "max_quarters", "k_neighbors", "negative_samples_per_positive",
-        "n_candidates", "boost_rounds", "num_leaves", "min_data_in_leaf",
+        "max_quarters",
+        "k_neighbors",
+        "negative_samples_per_positive",
+        "n_candidates",
+        "boost_rounds",
+        "num_leaves",
+        "min_data_in_leaf",
+        "embedding_width",
+        "embedding_epochs",
+        "embedding_batch_size",
     )
     for name in positive_args:
         value = getattr(args, name)
@@ -85,6 +142,8 @@ def parse_args(argv=None):
             parser.error(f"--{name.replace('_', '-')} must be positive")
     if args.learning_rate <= 0:
         parser.error("--learning-rate must be positive")
+    if args.embedding_learning_rate <= 0:
+        parser.error("--embedding-learning-rate must be positive")
     return args
 
 
@@ -98,6 +157,8 @@ def make_model(name, args):
             n_candidates=args.n_candidates,
         )
     if name == "lightgbm":
+        from remy.model.lightgbm import LightGBM
+
         return LightGBM(
             negatives_per_positive=args.negative_samples_per_positive,
             num_boost_round=args.boost_rounds,
@@ -106,6 +167,27 @@ def make_model(name, args):
             learning_rate=args.learning_rate,
             num_leaves=args.num_leaves,
             min_data_in_leaf=args.min_data_in_leaf,
+        )
+    if name == "embedding":
+        return EmbeddingRecommender(
+            embeddings=load_embeddings(),
+            method=args.embedding_method,
+            n_candidates=args.n_candidates,
+        )
+    if name == "embedding_trained":
+        from remy.model.embedding_trained import TrainedEmbeddingRecommender
+
+        kind = args.embedding_variant if args.embedding_variant in ("separate_fields", "tfidf") else "joint"
+        return TrainedEmbeddingRecommender(
+            embeddings=load_embeddings(kind),
+            n_candidates=args.n_candidates,
+            epochs=args.embedding_epochs,
+            learning_rate=args.embedding_learning_rate,
+            batch_size=args.embedding_batch_size,
+            seed=args.seed,
+            architecture=args.embedding_architecture,
+            width=args.embedding_width,
+            variant=args.embedding_variant,
         )
     raise ValueError(f"Unknown model: {name}")
 
@@ -120,9 +202,7 @@ def run(args):
     for quarter in quarters:
         for name in dict.fromkeys(args.models):
             model = make_model(name, args)
-            training_quarters = (
-                splits.training_quarters(quarter.start) if name == "lightgbm" else ()
-            )
+            training_quarters = splits.training_quarters(quarter.start) if name in ("lightgbm", "embedding_trained") else ()
             model.fit(
                 quarter.history,
                 recipes=quarter.recipes,
@@ -132,10 +212,7 @@ def run(args):
             user_ids = positives["user_id"].unique()
             # The evaluator can use popularity's global ranking directly,
             # filtering seen recipes without building per-user recommendation lists.
-            recommendations = (
-                None if name == "popularity"
-                else model.recommend_batch(user_ids, k=None)
-            )
+            recommendations = None if name == "popularity" else model.recommend_batch(user_ids, k=None)
             row = evaluate_quarter(
                 quarter,
                 model.ranking_,
@@ -147,8 +224,7 @@ def run(args):
             row["split"] = args.split
             rows.append(row)
             print(
-                f"{name:12s} {quarter.start.date()}  "
-                f"NDCG={row['NDCG']:.3f}  HR@10={row['HR@10']:.3f}",
+                f"{name:12s} {quarter.start.date()}  NDCG={row['NDCG']:.3f}  HR@10={row['HR@10']:.3f}",
                 flush=True,
             )
 
@@ -158,9 +234,7 @@ def run(args):
     results = pd.DataFrame(rows)
     if args.output is None:
         model_names = "-".join(dict.fromkeys(args.models))
-        run_name = args.run_name or (
-            f"{datetime.now().astimezone():%Y%m%d-%H%M%S-%f}_{args.split}_{model_names}"
-        )
+        run_name = args.run_name or (f"{datetime.now().astimezone():%Y%m%d-%H%M%S-%f}_{args.split}_{model_names}")
         output = args.artifacts_dir / run_name / "results.csv"
         output.parent.mkdir(parents=True, exist_ok=False)
     else:
@@ -168,10 +242,7 @@ def run(args):
         output.parent.mkdir(parents=True, exist_ok=True)
 
     results.to_csv(output, index=False)
-    config = {
-        key: str(value) if isinstance(value, Path) else value
-        for key, value in vars(args).items()
-    }
+    config = {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()}
     (output.parent / "run_config.json").write_text(json.dumps(config, indent=2) + "\n")
     if not args.no_plots:
         plot_paths = save_plots(results, output)

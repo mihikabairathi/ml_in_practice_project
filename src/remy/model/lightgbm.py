@@ -69,7 +69,11 @@ class LightGBM:
         self.tag_encoder_ = MultiLabelBinarizer(sparse_output=True)
         self.recipe_tags_ = self.tag_encoder_.fit_transform(tags).astype(np.float32).tocsr()
         self.recipe_tag_row_ = pd.Series(np.arange(len(recipes)), index=recipes["id"])
-        self.feature_names_ = USER_FEATURES + [f"tag_{tag}" for tag in self.tag_encoder_.classes_]
+        # Raw dataset tags can contain punctuation that LightGBM rejects in
+        # feature names (for example, ``less_thansql:name_topics...``).
+        self.feature_names_ = USER_FEATURES + [
+            f"tag_{i}" for i in range(len(self.tag_encoder_.classes_))
+        ]
 
         # Current state used at recommendation time
         self.user_features_ = self._user_features(interactions)
