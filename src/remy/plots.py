@@ -113,7 +113,7 @@ def save_plots(results: pd.DataFrame, output: Path) -> list[Path]:
                     edgecolor="#777777",
                     linewidth=0.6,
                 )
-                ax.bar_label(bars, fmt="%.3f", padding=5, fontsize=9)
+                ax.bar_label(bars, fmt="%.4f", padding=5, fontsize=9)
             _style_axes(ax)
             ax.set_xlabel("Metric")
             ax.set_ylabel("Score")

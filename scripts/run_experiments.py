@@ -148,7 +148,7 @@ def run(args):
             rows.append(row)
             print(
                 f"{name:12s} {quarter.start.date()}  "
-                f"NDCG={row['NDCG']:.3f}  HR@10={row['HR@10']:.3f}",
+                f"NDCG={row['NDCG']:.4f}  HR@10={row['HR@10']:.4f}",
                 flush=True,
             )
 
@@ -177,7 +177,7 @@ def run(args):
         plot_paths = save_plots(results, output)
         print("Saved charts: " + ", ".join(map(str, plot_paths)))
 
-    summary = results.groupby("model")[METRICS].mean().round(3)
+    summary = results.groupby("model")[METRICS].mean().round(4)
     print(f"\nMean across quarters:\n{summary.to_string()}")
     print(f"\nSaved {output}")
     return results
