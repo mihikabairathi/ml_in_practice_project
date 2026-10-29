@@ -1,0 +1,25 @@
+{
+  "commit": "17f32d01a153af8dcf362ec5dc16207dc0700f2d",
+  "python": "3.12.14",
+  "versions": {
+    "lightgbm": "4.7.0",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "scipy": "1.18.1",
+    "sklearn": "1.9.1"
+  },
+  "sha256": {
+    "src/remy/model/lightgbm.py": "d9a510daee8c2cdd7a5b766b5e089cb139cdc8662af31810bf90b58e6c22c1b0",
+    "src/remy/model/popularity.py": "ea2955a6ea9b89d88ac0e993522cf8b2cdaa43d3aa2f269a5433192ff039ccd9",
+    "src/remy/evaluate.py": "e74d628ed66033caa25713eb83fefcfb4e03a988eff3d01a0641fa12c0d954c5",
+    "src/remy/splits.py": "a8ed4d54cdcf71f27c7aeddf0bb03e3731ecf994cec3394afb45f9cf9c39c57c",
+    "scripts/run_experiments.py": "ff6929fe19079d61f6634c1f5ac27785833b2cd2a18db028beb599820aa70d64",
+    "data/processed/rolling/interactions.parquet": "2e2d305f54d3c23af591e96f32bf4de6e1202f5cee5bb84dbff4c659b82df49b",
+    "data/processed/rolling/recipes.parquet": "fe00214891328cd4921a87870c44f927824fe86b28795e3daa127dc87a6a4715",
+    "data/processed/rolling/windows.parquet": "07f6f9884045a2d4192435a76a312543e451214a35a357dc82997bcf25793615"
+  },
+  "threads": {
+    "OMP_NUM_THREADS": 4,
+    "OPENBLAS_NUM_THREADS": 4
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "models": [
+    "popularity",
+    "lightgbm"
+  ],
+  "split": "test",
+  "max_quarters": null,
+  "split_dir": "/Users/mihikabairathi/CMU/10718/data/processed/rolling",
+  "artifacts_dir": "/Users/mihikabairathi/CMU/10718/artifacts",
+  "run_name": "test_popularity_lightgbm_20261029",
+  "output": null,
+  "no_plots": false,
+  "k_neighbors": 50,
+  "min_rating": 5.0,
+  "n_candidates": 1000,
+  "negative_samples_per_positive": 10,
+  "boost_rounds": 200,
+  "learning_rate": 0.05,
+  "num_leaves": 31,
+  "min_data_in_leaf": 100,
+  "seed": 10718
+}
