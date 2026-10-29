@@ -7,33 +7,45 @@ from collections.abc import Iterable
 import numpy as np
 import pandas as pd
 from scipy import sparse
-from sklearn.preprocessing import normalize
 
 
 class KNNRecommender:
-    """Cosine item neighbors, summed over a user's liked recipes.
+    """Shrunk cosine item neighbors, blended with popularity.
 
     Only ratings at or above ``min_rating`` form the user-item matrix. All
     historical reviews count as seen. At recommendation time, KNN and LightGBM
-    use the same top ``n_candidates`` popularity shortlist; KNN ranks that list
-    with collaborative-filter scores. ``k_neighbors`` controls the item graph,
-    not the number of recommendations. ``training_quarters`` is accepted for
-    the shared model interface; this baseline learns directly from current history.
+    use the same top ``n_candidates`` popularity shortlist. Item similarity is
+    cosine times ``c / (c + shrinkage)``, where ``c`` counts users who liked
+    both recipes, so pairs with little support are damped. Each candidate's
+    score is ``cf_weight`` times its CF score plus ``1 - cf_weight`` times
+    its log popularity, each divided by its maximum over the user's
+    candidates. ``k_neighbors`` caps the item graph, not the number of
+    recommendations. ``shrinkage=0, cf_weight=1, k_neighbors=50`` reproduces
+    the original pure-CF ranking. ``training_quarters`` is accepted for the
+    shared model interface; this baseline learns directly from current history.
     """
 
     def __init__(
         self,
-        k_neighbors: int = 50,
+        k_neighbors: int = 300,
         min_rating: float = 5.0,
         n_candidates: int = 1000,
+        shrinkage: float = 20.0,
+        cf_weight: float = 0.05,
     ):
         if k_neighbors < 1:
             raise ValueError("k_neighbors must be positive")
         if n_candidates < 1:
             raise ValueError("n_candidates must be positive")
+        if shrinkage < 0:
+            raise ValueError("shrinkage must be nonnegative")
+        if not 0 <= cf_weight <= 1:
+            raise ValueError("cf_weight must be between 0 and 1")
         self.k_neighbors = k_neighbors
         self.min_rating = min_rating
         self.n_candidates = n_candidates
+        self.shrinkage = shrinkage
+        self.cf_weight = cf_weight
 
     def fit(
         self, interactions: pd.DataFrame, recipes=None, training_quarters=()
@@ -52,6 +64,9 @@ class KNNRecommender:
         )
         self.ranking_ = self.scores_.index.tolist()
         self.candidates_ = self.ranking_[:self.n_candidates]
+        self.log_popularity_ = dict(zip(
+            self.candidates_, np.log1p(self.scores_.iloc[:self.n_candidates].to_numpy())
+        ))
         self.seen_ = history.groupby("user_id")["recipe_id"].agg(set).to_dict()
         self.idx_to_item_ = catalog.to_numpy()
         self.item_to_idx_ = {item: i for i, item in enumerate(self.idx_to_item_)}
@@ -66,10 +81,18 @@ class KNNRecommender:
             shape=(len(users), len(catalog)),
         )
         if len(positive):
-            normalized = normalize(self.R_.tocsc(), norm="l2", axis=0)
-            similarity = (normalized.T @ normalized).tocsr()
+            # R is binary, so R^T R counts the users who liked both recipes.
+            similarity = (self.R_.T @ self.R_).tocsr()
             similarity.setdiag(0)
             similarity.eliminate_zeros()
+            co_likes = similarity.data
+            likes = np.asarray(self.R_.sum(axis=0), dtype=np.float32).ravel()
+            rows = np.repeat(
+                np.arange(similarity.shape[0], dtype=np.int32),
+                np.diff(similarity.indptr),
+            )
+            cosine = co_likes / np.sqrt(likes[rows] * likes[similarity.indices])
+            similarity.data = cosine * co_likes / (co_likes + self.shrinkage)
             self.S_ = self._top_k_sparse(similarity, self.k_neighbors)
         else:
             self.S_ = sparse.csr_matrix((len(catalog), len(catalog)), dtype=np.float32)
@@ -92,7 +115,7 @@ class KNNRecommender:
         )
 
     def _candidate_ranking(self, user_id: int) -> list[int]:
-        """Rank the shared popularity shortlist by collaborative-filter score."""
+        """Rank the shared popularity shortlist by blended CF and popularity."""
         if not hasattr(self, "S_"):
             raise RuntimeError("Call fit before recommend")
         seen = self.seen_.get(user_id, set())
@@ -112,8 +135,22 @@ class KNNRecommender:
             dtype=np.float32,
             count=len(candidates),
         )
+        if candidate_scores.max(initial=0) > 0:
+            candidate_scores /= candidate_scores.max()
+        if self.cf_weight < 1:
+            log_popularity = np.fromiter(
+                (self.log_popularity_[recipe_id] for recipe_id in candidates),
+                dtype=np.float32,
+                count=len(candidates),
+            )
+            if log_popularity.max(initial=0) > 0:
+                log_popularity /= log_popularity.max()
+            candidate_scores = (
+                self.cf_weight * candidate_scores
+                + (1 - self.cf_weight) * log_popularity
+            )
         # The candidate list starts in popularity order, so stable sorting
-        # keeps popularity as the tie-break for recipes with equal CF scores.
+        # keeps popularity as the tie-break for recipes with equal scores.
         order = np.argsort(-candidate_scores, kind="stable")
         return [candidates[i] for i in order]
 

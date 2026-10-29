@@ -131,8 +131,10 @@ Model settings exposed by the runner are:
 | Model | Argument | Default | Meaning |
 | --- | --- | ---: | --- |
 | KNN and LightGBM | `--n-candidates` | 1000 | Popular recipes shared as the candidate shortlist |
-| KNN | `--k-neighbors` | 50 | Similar recipes retained per recipe in the item graph |
+| KNN | `--k-neighbors` | 300 | Similar recipes retained per recipe in the item graph |
 | KNN | `--min-rating` | 5 | Minimum rating treated as positive |
+| KNN | `--shrinkage` | 20 | Damps cosine by `c / (c + shrinkage)`, where `c` is the co-like count |
+| KNN | `--cf-weight` | 0.05 | Weight on the CF score; the rest goes to log popularity |
 | LightGBM | `--negative-samples-per-positive` | 10 | Sampled negatives per historical positive |
 | LightGBM | `--boost-rounds` | 200 | Number of boosting rounds |
 | LightGBM | `--learning-rate` | 0.05 | Boosting learning rate |
@@ -145,8 +147,11 @@ LightGBM's negative-sampling, rounds, and shortlist defaults match
 quarters available at each checkpoint. Run
 `python scripts/run_experiments.py --help` for the full argument list.
 KNN and LightGBM use the same popularity-ordered candidate shortlist. KNN ranks
-those candidates by collaborative-filter score; `--k-neighbors` controls how
-many neighbors each recipe keeps in the similarity graph.
+those candidates by a blend of shrunk-cosine collaborative-filter score and log
+popularity, each scaled by its maximum over the user's candidates;
+`--k-neighbors` caps how many neighbors each recipe keeps in the similarity
+graph. The defaults were chosen for validation Recall@10. Use
+`--shrinkage 0 --cf-weight 1 --k-neighbors 50` for the original pure-CF ranking.
 
 Each run creates a unique folder under `artifacts/` with `results.csv`,
 `run_config.json`, a quarterly trend chart, a clustered hit-rate/recall chart,

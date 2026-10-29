@@ -54,8 +54,10 @@ def parse_args(argv=None):
     paths.add_argument("--no-plots", action="store_true", help="Skip saving PNG charts")
 
     knn = parser.add_argument_group("KNN settings")
-    knn.add_argument("--k-neighbors", type=int, default=50, help="Neighbors retained per recipe (default: 50)")
+    knn.add_argument("--k-neighbors", type=int, default=300, help="Neighbors retained per recipe (default: 300)")
     knn.add_argument("--min-rating", type=float, default=5.0, help="Minimum rating treated as positive (default: 5)")
+    knn.add_argument("--shrinkage", type=float, default=20.0, help="Similarity shrinkage c / (c + shrinkage) on co-like count c (default: 20)")
+    knn.add_argument("--cf-weight", type=float, default=0.05, help="Weight on CF score vs. log popularity, from 0 to 1 (default: 0.05)")
 
     candidates = parser.add_argument_group("Candidate shortlist settings")
     candidates.add_argument(
@@ -85,6 +87,10 @@ def parse_args(argv=None):
             parser.error(f"--{name.replace('_', '-')} must be positive")
     if args.learning_rate <= 0:
         parser.error("--learning-rate must be positive")
+    if args.shrinkage < 0:
+        parser.error("--shrinkage must be nonnegative")
+    if not 0 <= args.cf_weight <= 1:
+        parser.error("--cf-weight must be between 0 and 1")
     return args
 
 
@@ -96,6 +102,8 @@ def make_model(name, args):
             k_neighbors=args.k_neighbors,
             min_rating=args.min_rating,
             n_candidates=args.n_candidates,
+            shrinkage=args.shrinkage,
+            cf_weight=args.cf_weight,
         )
     if name == "lightgbm":
         return LightGBM(
