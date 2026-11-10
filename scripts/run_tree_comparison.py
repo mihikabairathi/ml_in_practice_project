@@ -71,6 +71,7 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--stride", type=int, default=1, help="Evaluate every Nth quarter in each split.")
     parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--validation-only", action="store_true", help="Tune and evaluate on validation only.")
     args = parser.parse_args()
     if args.stride < 1 or args.threads < 1:
         parser.error("--stride and --threads must be positive")
@@ -78,7 +79,8 @@ def main():
     splits = RollingSplits()
     rows = []
     names = list(CONFIGS)
-    for split in ("val", "test"):
+    splits_to_evaluate = ("val",) if args.validation_only else ("val", "test")
+    for split in splits_to_evaluate:
         for quarter in splits.evaluation_quarters(split)[::args.stride]:
             rows.extend(dict(split=split, **row) for row in run_quarter(splits, quarter, names, args.threads))
             pd.DataFrame(rows).to_csv(args.out / "quarterly.csv", index=False)

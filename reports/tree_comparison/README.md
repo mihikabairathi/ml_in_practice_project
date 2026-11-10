@@ -39,11 +39,10 @@ training quarter. Five-star outcomes are positives, with up to ten sampled
 available, unseen negatives per positive. The evaluator excludes previously
 seen recipes and completes each ranking with the popularity fallback.
 
-For this pilot, the runner evaluates the first quarter of each validation year
-(2007–2010) and test year (2011–2015). It uses every completed training quarter
-at each cutoff, including earlier test quarters once their labels are historical.
-Mean validation NDCG picks one setting per challenger. The test comparison
-uses equal weight per quarter and the fixed LightGBM reference.
+The comparison evaluates all 16 rolling validation quarters from 2007 through
+2010. It uses every completed training quarter at each cutoff. Mean
+validation NDCG selects one setting per challenger, with equal weight per
+quarter. The reported comparison uses validation scores.
 
 - LightGBM uses 200 rounds, learning rate 0.05, and 31 leaves.
 - XGBoost compares depths 3 and 6, with 120 rounds and learning rate 0.08.
@@ -56,42 +55,25 @@ uses equal weight per quarter and the fixed LightGBM reference.
   with a sentinel below the observed feature range.
 
 Run with Python 3.12 after preparing the rolling data with the repository’s
-split script. The pilot used LightGBM 4.7.0, scikit-learn 1.9.1, and XGBoost 3.4.1.
+split script. The run used LightGBM 4.7.0, scikit-learn 1.9.1, and XGBoost 3.4.1.
 
 ```sh
 uv sync --extra trees
 OMP_NUM_THREADS=4 uv run --extra trees python scripts/run_tree_comparison.py \
-  --stride 4 --out artifacts/tree_comparison
+  --validation-only --out artifacts/tree_comparison
 ```
-
-Use `--stride 1` to evaluate every validation and test quarter.
 
 ## Validation results
 
 | Model | Mean NDCG | HR@100 | Recall@100 |
 | --- | ---: | ---: | ---: |
-| LightGBM | 0.13102 | 0.20233 | 0.08613 |
-| XGBoost, depth 3 | 0.12948 | 0.19466 | 0.08168 |
-| XGBoost, depth 6 | 0.13097 | 0.20236 | 0.08621 |
-| Random Forest, depth 8 | 0.12603 | 0.15451 | 0.06124 |
-| Random Forest, depth 14 | 0.12865 | 0.17603 | 0.07177 |
+| LightGBM | 0.12674 | 0.17979 | 0.07908 |
+| XGBoost, depth 3 | 0.12557 | 0.17376 | 0.07623 |
+| XGBoost, depth 6 | 0.12664 | 0.18048 | 0.07935 |
+| Random Forest, depth 8 | 0.12258 | 0.14357 | 0.06169 |
+| Random Forest, depth 14 | 0.12498 | 0.16166 | 0.06990 |
 
-The depth-6 XGBoost and depth-14 Random Forest advance to test.
-
-## Test results
-
-| Model | Mean NDCG | NDCG@Candidates | HR@10 | HR@100 | Recall@10 | Recall@100 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| LightGBM | 0.11551 | 0.04689 | 0.03304 | 0.14954 | 0.01978 | 0.09050 |
-| XGBoost, depth 6 | 0.11568 | 0.04707 | 0.03342 | 0.15217 | 0.01941 | 0.09259 |
-| Random Forest, depth 14 | 0.11390 | 0.04528 | 0.02675 | 0.14216 | 0.01636 | 0.08824 |
-
-XGBoost gained 0.00018 mean NDCG over LightGBM and won three of five
-quarters. It gained 0.26 percentage points in HR@100, while LightGBM
-retained a slight edge in Recall@10. The five Q1 cutoffs give only a narrow
-view of performance across seasons. Random Forest lost 0.00160 mean NDCG
-and beat LightGBM on one quarter.
-
-The LightGBM test metrics match the prior run's corresponding five quarters
-to floating-point precision. See [quarterly results](quarterly.csv) and
-[split averages](summary.csv).
+Depth-6 XGBoost finished 0.00010 behind LightGBM in mean NDCG, with
+slightly higher HR@100 and Recall@100. Depth-14 Random Forest finished
+0.00176 behind LightGBM in mean NDCG. See the
+[quarterly results](quarterly.csv) and [metric averages](summary.csv).
