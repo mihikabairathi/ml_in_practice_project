@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remy Recipe Recommender</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>🍳 Remy Recipe Recommender</h1>
+    <p>Personalized recommendations powered by machine learning</p>
+  </header>
+
+  <main class="container">
+    <!-- Cold-Start Onboarding Quiz -->
+    <section class="card" id="quiz-section">
+      <h2>Step 1: Taste Preferences (Cold-Start Quiz)</h2>
+      <p>Rate a few sample dishes below so our recommendation engine can learn your preferences:</p>
+
+      <div id="seed-recipes-container" class="grid" style="margin-bottom: 1.5rem;">
+        <p>Loading seed recipes...</p>
+      </div>
+
+      <h2>Step 2: Cooking Constraints</h2>
+      <form id="preference-form">
+        <div class="form-group">
+          <label for="max-time">Max Cooking Time (minutes):</label>
+          <input type="number" id="max-time" value="45" min="5" max="180" step="5">
+        </div>
+
+        <div class="form-group">
+          <label for="max-ingredients">Max Ingredients:</label>
+          <input type="number" id="max-ingredients" value="10" min="1" max="25">
+        </div>
+
+        <button type="submit" class="btn btn-primary">Get My Personalized Recommendations</button>
+      </form>
+    </section>
+
+    <!-- Recommendation Output Grid -->
+    <section class="recommendations-container" id="results-section" style="display: none;">
+      <h2>Recommended for You</h2>
+      <div id="rec-grid" class="grid">
+        <p class="loading">Generating personalized model inference...</p>
+      </div>
+      <button id="reset-btn" class="btn" style="margin-top: 1.5rem; background-color: #666;">← Adjust Preferences</button>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,242 @@
+{
+  "quick_easy": {
+    "meta": {
+      "label": "Quick & Easy Meals",
+      "description": "Short prep time and minimal ingredients.",
+      "pref_minutes": 15,
+      "pref_ingredients": 5
+    },
+    "items": [
+      {
+        "recipe_id": 103796,
+        "title": "lemon cheese",
+        "minutes": 15,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 67298,
+        "title": "crustless banana cream pie",
+        "minutes": 15,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 11090,
+        "title": "feta preserve",
+        "minutes": 15,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 134788,
+        "title": "broiled peaches",
+        "minutes": 15,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 371031,
+        "title": "new zealand fruit salad",
+        "minutes": 15,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 270578,
+        "title": "foolproof chocolate fudge",
+        "minutes": 15,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 249485,
+        "title": "breakfast on the barbie",
+        "minutes": 15,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 467927,
+        "title": "chili onions",
+        "minutes": 15,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 213149,
+        "title": "mock almond roca",
+        "minutes": 15,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 31698,
+        "title": "raspberry cream dressing",
+        "minutes": 15,
+        "rating_mean": 5.0,
+        "score": 10.0
+      }
+    ]
+  },
+  "gourmet": {
+    "meta": {
+      "label": "Gourmet Experience",
+      "description": "Rich, multi-step detailed culinary recipes.",
+      "pref_minutes": 60,
+      "pref_ingredients": 12
+    },
+    "items": [
+      {
+        "recipe_id": 329284,
+        "title": "yellow curry chicken   rice soup",
+        "minutes": 60,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 234605,
+        "title": "kidney bean vegetable soup",
+        "minutes": 60,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 131998,
+        "title": "roasted vegetable hummus",
+        "minutes": 60,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 61144,
+        "title": "feta olive stuffed flatbread",
+        "minutes": 60,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 254095,
+        "title": "zucchini with chickpea and mushroom stuffing",
+        "minutes": 60,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 428763,
+        "title": "mud hen bars",
+        "minutes": 60,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 21338,
+        "title": "the best apple pudding",
+        "minutes": 60,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 296108,
+        "title": "chocolate chip pie with bourbon whipped cream",
+        "minutes": 60,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 25335,
+        "title": "ho ho cake",
+        "minutes": 60,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 234046,
+        "title": "mexi chicken and black bean layered casserole",
+        "minutes": 60,
+        "rating_mean": 5.0,
+        "score": 10.0
+      }
+    ]
+  },
+  "healthy": {
+    "meta": {
+      "label": "Light & Healthy",
+      "description": "Low calories and fresh ingredients.",
+      "pref_minutes": 30,
+      "pref_ingredients": 7
+    },
+    "items": [
+      {
+        "recipe_id": 342565,
+        "title": "giada s peppermint chocolate sandwich cookies",
+        "minutes": 30,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 412814,
+        "title": "rice with caramelized shallots from melissa d arabian",
+        "minutes": 30,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 62345,
+        "title": "summer broccoli salad",
+        "minutes": 30,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 151445,
+        "title": "glazed pork medallions",
+        "minutes": 30,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 62163,
+        "title": "roast pork  stuffed with stilton",
+        "minutes": 30,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 324989,
+        "title": "sherry laced garlic soup with pasta stars",
+        "minutes": 30,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 370549,
+        "title": "sesame cheese crispies",
+        "minutes": 30,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 19950,
+        "title": "brown edge wafers",
+        "minutes": 30,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 150957,
+        "title": "dee s  dinner salad",
+        "minutes": 30,
+        "rating_mean": 5.0,
+        "score": 10.0
+      },
+      {
+        "recipe_id": 150391,
+        "title": "dusty cauliflower",
+        "minutes": 30,
+        "rating_mean": 5.0,
+        "score": 10.0
+      }
+    ]
+  }
+}
