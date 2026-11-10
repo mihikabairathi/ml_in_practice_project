@@ -146,13 +146,6 @@ class LightGBM:
         cutoff: start of the quarter being predicted (used for "days since" features).
                 Defaults to one day after the latest interaction.
         """
-        X_train, y_train, group_sizes = self._prepare_training(
-            interactions, recipes, training_quarters, cutoff
-        )
-        self._fit_estimator(X_train, y_train, group_sizes)
-        return self
-
-    def _prepare_training(self, interactions, recipes, training_quarters, cutoff):
         if recipes is None:
             raise ValueError("recipes with a 'tags' column are required")
         if not training_quarters:
@@ -217,18 +210,12 @@ class LightGBM:
         if np.unique(y_train).size < 2:
             raise ValueError("Training data must contain both positive and negative examples")
 
-        return X_train, y_train, group_sizes
-
-    def _fit_estimator(self, X_train, y_train, group_sizes):
-        # Raw tag names can contain punctuation that LightGBM rejects.
-        names = self.feature_names_
-        if any(set('[]{}":,') & set(name) for name in names):
-            names = [f"feature_{i}" for i in range(X_train.shape[1])]
         train = lgb.Dataset(
-            X_train, label=y_train, feature_name=names,
+            X_train, label=y_train, feature_name=self.feature_names_,
             group=group_sizes if self.objective == "lambdarank" else None,
         )
         self.model_ = lgb.train(self.params, train, num_boost_round=self.num_boost_round)
+        return self
 
     def _quarter_examples(self, quarter, rng):
         """Positive/negative (user, recipe) pairs + features for one completed quarter."""
@@ -298,16 +285,11 @@ class LightGBM:
 
         if user_id not in self.user_features_.index or len(seen) < MIN_REVIEWS:
             ranked = [r for r in self.ranking_ if r not in seen]
-        elif unseen:
-            X = self._features([user_id] * len(unseen), unseen, self.state_)
-            scores = self._score(X)
-            ranked = [unseen[i] for i in np.lexsort((np.asarray(unseen), -scores))]
         else:
-            ranked = []
+            X = self._features([user_id] * len(unseen), unseen, self.state_)
+            scores = self.model_.predict(X)
+            ranked = [unseen[i] for i in np.lexsort((np.asarray(unseen), -scores))]
         return ranked if k is None else ranked[:k]
-
-    def _score(self, X):
-        return self.model_.predict(X)
 
     def recommend_batch(self, user_ids: Iterable[int], k: int | None = None) -> dict[int, list[int]]:
         if not hasattr(self, "model_"):

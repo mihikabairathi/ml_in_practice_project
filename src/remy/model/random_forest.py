@@ -1,36 +1,30 @@
-"""Random forest classifier for the feature-rich recipe reranker."""
+"""Random Forest recipe reranking with dense popularity and MiniLM features."""
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 
-from remy.model.lightgbm_features import ALL_ROUND1, LightGBM
+from remy.model.xgboost import XGBOOST_GROUPS, _TreeReranker
 
 
-class RandomForest(LightGBM):
-    def __init__(self, *, max_depth=12, n_estimators=40, min_samples_leaf=20,
-                 max_features="sqrt", max_samples=0.2, num_threads=4,
-                 feature_groups=ALL_ROUND1, **kwargs):
-        super().__init__(feature_groups=feature_groups, num_threads=num_threads, **kwargs)
-        if self.objective != "binary":
-            raise ValueError("Random forest reranker requires the binary objective")
-        self.estimator_params = dict(
-            max_depth=max_depth, n_estimators=n_estimators,
-            min_samples_leaf=min_samples_leaf, max_features=max_features,
-            max_samples=max_samples,
-            n_jobs=num_threads, random_state=self.seed,
-        )
+class RandomForest(_TreeReranker):
+    def __init__(self, seed=10718, num_threads=4):
+        groups = tuple(group for group in XGBOOST_GROUPS if group != "tags")
+        super().__init__(groups, seed, num_threads)
 
     @staticmethod
-    def _matrix(X):
-        # sklearn's sparse forest input requires finite values. Use a sentinel
-        # outside the range of the shared numeric recipe features.
-        X = X.copy()
-        np.nan_to_num(X.data, copy=False, nan=-1e9)
-        return X
+    def _matrix(features):
+        return np.nan_to_num(features.toarray(), copy=False, nan=-1e9)
 
-    def _fit_estimator(self, X_train, y_train, group_sizes):
-        self.model_ = RandomForestClassifier(**self.estimator_params)
-        self.model_.fit(self._matrix(X_train).tocsc(), y_train)
+    def _train(self, X, y):
+        return RandomForestClassifier(
+            n_estimators=32,
+            max_depth=12,
+            min_samples_leaf=40,
+            max_features=0.5,
+            max_samples=0.12,
+            n_jobs=self.num_threads,
+            random_state=self.seed,
+        ).fit(self._matrix(X), y)
 
-    def _score(self, X):
-        return self.model_.predict_proba(self._matrix(X))[:, 1]
+    def _score(self, features):
+        return self.model_.predict_proba(self._matrix(features))[:, 1]
