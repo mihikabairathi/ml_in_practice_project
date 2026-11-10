@@ -77,3 +77,21 @@ Use `--stride 1` to evaluate every validation and test quarter.
 | Random Forest, depth 14 | 0.12865 | 0.17603 | 0.07177 |
 
 The depth-6 XGBoost and depth-14 Random Forest advance to test.
+
+## Test results
+
+| Model | Mean NDCG | NDCG@Candidates | HR@10 | HR@100 | Recall@10 | Recall@100 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| LightGBM | 0.11551 | 0.04689 | 0.03304 | 0.14954 | 0.01978 | 0.09050 |
+| XGBoost, depth 6 | 0.11568 | 0.04707 | 0.03342 | 0.15217 | 0.01941 | 0.09259 |
+| Random Forest, depth 14 | 0.11390 | 0.04528 | 0.02675 | 0.14216 | 0.01636 | 0.08824 |
+
+XGBoost gained 0.00018 mean NDCG over LightGBM and won three of five
+quarters. It gained 0.26 percentage points in HR@100, while LightGBM
+retained a slight edge in Recall@10. The five Q1 cutoffs give only a narrow
+view of performance across seasons. Random Forest lost 0.00160 mean NDCG
+and beat LightGBM on one quarter.
+
+The LightGBM test metrics match the prior run's corresponding five quarters
+to floating-point precision. See [quarterly results](quarterly.csv) and
+[split averages](summary.csv).
