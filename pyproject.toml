@@ -27,6 +27,7 @@ dependencies = [
 [project.optional-dependencies]
 # Zero-shot LLM baseline (remy.model.llm); needs a CUDA GPU.
 llm = ["vllm>=0.12"]
+trees = ["xgboost>=3,<4"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
