@@ -83,6 +83,7 @@ scripts/
   run_experiments.py          # Compare models on rolling validation/test tasks
   run_llm_baseline.py         # Zero-shot LLM baseline on val + test (GPU)
   check_survey_models.py      # Verify A/B survey wrappers match each model's own recommend()
+  simulate_survey.py          # Fill the A/B survey with simulated participants (sample data)
 pyproject.toml                # Shared dependencies and package configuration
 ```
 
@@ -334,6 +335,31 @@ uv run uvicorn remy.abtest.app:app --port 8000      # then open http://localhost
 
 The first start fits the models: about 2 minutes for Popularity plus LightGBM at the 2016 cutoff.
 Wait for `Survey ready` in the log. `GET /healthz` returns `{"ok": true}` once the app is serving.
+
+### Try it locally with sample data
+
+You need the data from `download_data.py` and `make_splits.py`, plus `uv sync --extra abtest`.
+
+1. **Click through it yourself.** Start the app, then open http://localhost:8000.
+   ```bash
+   uv run uvicorn remy.abtest.app:app --port 8000
+   ```
+   Your test answers go to `data/processed/abtest/responses.jsonl`, the same file real participants use.
+   Delete it before the real study starts.
+2. **Generate sample data.** Simulated participants with hidden tastes go through the real app,
+   using the models in `config.yaml`. Their responses go to a separate file,
+   `data/processed/abtest/sample_responses.jsonl`, so real data is never mixed in.
+   ```bash
+   uv run python scripts/simulate_survey.py -n 50
+   ```
+3. **Analyse the sample.** Point the notebook at the sample file. The command is also printed by the script.
+   ```bash
+   REMY_ABTEST_RESPONSES=$PWD/data/processed/abtest/sample_responses.jsonl uv run jupyter lab notebooks/abtest_analysis.ipynb
+   ```
+
+For quicker iterations, set an earlier `train_cutoff` such as `2008-01-01` in a copy of the config
+and pass it with `--config` (or `REMY_ABTEST_CONFIG` for the app). LightGBM then fits in about 10 seconds
+instead of about a minute. Each fitted model is cached, so only the first run at a given cutoff is slow.
 
 ### Deploy
 

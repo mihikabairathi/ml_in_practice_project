@@ -54,11 +54,6 @@ class TrainingData:
 
 def load_training_data(cutoff: dt.date, supervised: bool) -> TrainingData:
     splits = RollingSplits()
-    # Drop malformed tags such as "less_thansql:name_topics_of_recipegreater_than"
-    # (one 2011 recipe): LightGBM rejects JSON characters in feature names.
-    splits.recipes["tags"] = splits.recipes["tags"].map(
-        lambda tags: [t for t in tags if t and not re.search(r'[":,\[\]{}\\]', t)]
-    )
     cutoff = pd.Timestamp(cutoff)
     last = splits.windows["end"].max()
     if cutoff > last:

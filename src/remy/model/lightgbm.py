@@ -13,6 +13,7 @@ strictly before T:
 from __future__ import annotations
 
 import ast
+import re
 from collections.abc import Iterable
 
 import lightgbm as lgb
@@ -178,7 +179,7 @@ class LightGBM:
             raise ValueError(f"unknown feature groups: {bad}")
         self.dense_cols_ = [c for g in ALL_GROUPS if g in self.feature_groups for c in GROUP_COLS[g]]
         self.use_tags_ = "tags" in self.feature_groups
-        self.feature_names_ = self.dense_cols_ + ([f"tag_{t}" for t in self.tag_names_] if self.use_tags_ else [])
+        self.feature_names_ = self.dense_cols_ + (self._tag_feature_names(self.tag_names_) if self.use_tags_ else [])
 
         # ---- current state used at recommendation time ----
         self.state_ = self._state(interactions, self.cutoff_)
@@ -447,6 +448,21 @@ class LightGBM:
         if self.use_tags_:
             blocks.append(self.recipe_tags_[rrows])
         return sparse.hstack(blocks, format="csr")
+
+    @staticmethod
+    def _tag_feature_names(tags):
+        """LightGBM rejects JSON characters in feature names; one Food.com tag
+        ("less_thansql:name_topics_of_recipegreater_than", 2011) has a ':'.
+        Replace such characters and keep names unique. Tag columns are unchanged."""
+        names, used = [], set()
+        for tag in tags:
+            name = "tag_" + re.sub(r'[",:\[\]{}\\]', "_", tag)
+            base, i = name, 1
+            while name in used:
+                name, i = f"{base}_{i}", i + 1
+            used.add(name)
+            names.append(name)
+        return names
 
     @staticmethod
     def as_tag_list(value):
