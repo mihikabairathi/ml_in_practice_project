@@ -238,11 +238,19 @@ and full-NDCG numbers mostly reflect the popularity fallback after those 10.
 2. Sees two lists side by side, one from each of two recommenders, without being told which is which.
 3. Rates every recipe in both lists, rates each list overall, and optionally picks the list they prefer.
 
-Responses go to SQLite, along with which model produced each list, which side it was shown on, and each item's rank.
+Each completed survey is appended as one JSON line to `data/processed/abtest/responses.jsonl`. The line records:
+
+- the user's ID and timestamps
+- the training cutoff, both models and their params
+- the quiz ratings
+- both lists, with each list's model, side, overall rating and the rank and rating of every item
+- the participant's preferred model
+
+In-progress surveys live in memory, so they are lost if the server restarts. Every run of the survey is treated as a new user.
 
 Models are fit once, at startup, on reviews before `train_cutoff`. The fitted models are cached under `data/processed/abtest/models/`. Model code is not changed. A wrapper (`remy/abtest/models.py`) adds the participant's quiz ratings to the fitted model's per-user state, calls the model's own `recommend`, and then removes them.
 
-Settings live in `src/remy/abtest/config.yaml`: the two models (popularity vs. default LightGBM) and their params, the cutoff, the quiz and list sizes, and the database path. Run the app after `make_splits.py`:
+Settings live in `src/remy/abtest/config.yaml`: the two models (popularity vs. default LightGBM) and their params, the cutoff, the quiz and list sizes, and the output path. Run the app after `make_splits.py`:
 
 ```bash
 uv sync --extra abtest
@@ -254,11 +262,14 @@ Optional settings:
 - Set `REMY_ABTEST_CONFIG=path/to/other.yaml` to use another config file.
 - Add `?pid=<id>` to the invite link to store an external participant ID.
 
-To load the results into DataFrames:
+To load the results:
 
 ```python
-from remy.abtest.db import load_responses
-tables = load_responses("data/processed/abtest/responses.sqlite")
+import pandas as pd
+from remy.abtest.responses import load_responses
+
+raw = pd.read_json("data/processed/abtest/responses.jsonl", lines=True)  # one row per survey
+items = load_responses("data/processed/abtest/responses.jsonl")           # one row per rated recommendation
 ```
 
 To make another model available, subclass `SurveyModel` in `remy/abtest/models.py` and register it in `MODELS`:

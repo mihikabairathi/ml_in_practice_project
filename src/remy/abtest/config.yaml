@@ -5,12 +5,12 @@
 train_cutoff: 2016-01-01
 
 # Relative paths resolve from the repository root.
-db_path: data/processed/abtest/responses.sqlite
+responses_path: data/processed/abtest/responses.jsonl   # one JSON line per completed survey
 model_cache_dir: data/processed/abtest/models
 
 survey:
-  n_quiz: 10                    # cold-start recipes the participant rates
-  n_recs: 6                     # recipes shown in each of the two lists
+  n_quiz: 5                     # cold-start recipes the participant rates
+  n_recs: 10                    # recipes shown in each of the two lists
   quiz_pool_size: 300           # quiz recipes are sampled from the top-N most reviewed,
                                 # after skipping the n_recs most reviewed (popularity's picks)
   show_community_stats: false   # average rating / review count on cards (hints at popularity)

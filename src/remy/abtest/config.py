@@ -30,7 +30,7 @@ class ModelSpec(BaseModel):
 
 class Config(BaseModel):
     train_cutoff: dt.date
-    db_path: Path
+    responses_path: Path
     model_cache_dir: Path
     survey: SurveySettings = SurveySettings()
     models: dict[str, ModelSpec]
@@ -47,7 +47,7 @@ class Config(BaseModel):
                 raise ValueError(f"Unknown model type {spec.type!r}; choose from {sorted(MODELS)}")
         return models
 
-    @field_validator("db_path", "model_cache_dir")
+    @field_validator("responses_path", "model_cache_dir")
     @classmethod
     def _from_root(cls, path: Path) -> Path:
         return path if path.is_absolute() else PROJECT_ROOT / path
