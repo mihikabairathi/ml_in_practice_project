@@ -25,4 +25,4 @@ models:
     params: {}
   b:
     type: lightgbm
-    params: {}                  # LightGBM defaults; trains on all quarters before train_cutoff
+    params: {}                  # defaults: all feature groups; trains on all quarters before train_cutoff

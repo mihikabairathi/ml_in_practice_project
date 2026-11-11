@@ -116,21 +116,54 @@ class KNNSurvey(SurveyModel):
             m.R_ = m.R_[:-1]
 
 
+HELPER_USER_ID = -999_999_999
+
+
 class LightGBMSurvey(SurveyModel):
-    """LightGBM also needs the user's summary features (built with its own helper)."""
+    """LightGBM keeps per-user state in ``state_``: the user feature table
+    (``state_["user"]``, also ``user_features_``) and tag-taste rows in
+    ``state_["freq"]``/``state_["norm"]``, indexed by ``state_["urow"]``.
+
+    The new user's rows come from the model's own ``_state`` run on just their
+    ratings. The one exception is ``user_pref_log_pop`` (mean popularity of liked
+    recipes), which needs the full history, so it is taken from the fitted
+    recipe popularity instead.
+    """
 
     model_class = LightGBM
     supervised = True
 
     def add_user(self, ratings):
         super().add_user(ratings)
-        m = self.model
-        m.user_features_ = pd.concat([m.user_features_, LightGBM._user_features(ratings)])
+        m, st = self.model, self.model.state_
+        user_id = ratings["user_id"].iat[0]
+        rows = ratings.rename(columns={"date": m.date_col_})
+        # _state fails when no one in its input liked anything, so add a throwaway
+        # helper user with one liked recipe. Features are per user, so it can't
+        # change this user's rows; it is dropped below.
+        helper = rows.iloc[[0]].assign(user_id=HELPER_USER_ID, rating=5, recipe_id=m.recipe_ids_[0])
+        mini = m._state(pd.concat([rows, helper], ignore_index=True), m.cutoff_)
+
+        user = mini["user"].drop(index=HELPER_USER_ID)
+        liked = ratings.loc[ratings["rating"] >= m.liked_min_rating, "recipe_id"]
+        liked = [r for r in liked.drop_duplicates() if r in m._catalog_set]
+        if liked:
+            user["user_pref_log_pop"] = st["recipe"].loc[liked, "recipe_log_pop"].mean()
+        st["user"] = m.user_features_ = pd.concat([st["user"], user])
+
+        if user_id in mini["urow"].index:  # only users with liked recipes get a taste row
+            r = mini["urow"][user_id]
+            st["freq"] = sparse.vstack([st["freq"], mini["freq"][r]], format="csr")
+            st["norm"] = sparse.vstack([st["norm"], mini["norm"][r]], format="csr")
+            st["urow"] = pd.concat([st["urow"], pd.Series({user_id: st["freq"].shape[0] - 1})])
 
     def remove_user(self, user_id):
         super().remove_user(user_id)
-        m = self.model
-        m.user_features_ = m.user_features_.drop(index=user_id, errors="ignore")
+        m, st = self.model, self.model.state_
+        st["user"] = m.user_features_ = st["user"].drop(index=user_id, errors="ignore")
+        if user_id in st["urow"].index:
+            st["urow"] = st["urow"].drop(index=user_id)
+            st["freq"], st["norm"] = st["freq"][:-1], st["norm"][:-1]
 
 
 MODELS: dict[str, type[SurveyModel]] = {

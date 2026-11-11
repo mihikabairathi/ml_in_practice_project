@@ -56,6 +56,8 @@ notebooks/
   eda.ipynb                   # Exploration and plots
   rolling_popularity.ipynb    # Training and evaluation for the popularity model
   rolling_lightgbm.ipynb      # Training and evaluation for the LightGBM model
+  lightgbm_feature_experiments_part{1,2}.ipynb # LightGBM feature-group ablations
+  abtest_analysis.ipynb       # Analysis of A/B survey responses
   rolling_embedding.ipynb     # Frozen embedding evaluation
   rolling_embedding_training.ipynb # Trained scoring over frozen inputs
 src/remy/
@@ -67,9 +69,10 @@ src/remy/
     embedding.py              # Frozen embedding recommendation
     embedding_trained.py      # Learned linear/nonlinear scoring
     knn.py                    # Item-to-item cosine collaborative filtering
-    lightgbm.py               # LightGBM reranker on user stats + recipe tags
+    lightgbm.py               # LightGBM reranker with user, recipe and user x recipe features
     llm.py                    # Zero-shot LLM picks 10 recipes from a popularity shortlist
     llm_prompts.py            # Prompt text for llm.py
+  abtest/                     # Blind A/B survey web app (see "Blind A/B survey")
   evaluate.py                 # Common metric-computing function
   plots.py                    # Saved experiment charts
   splits.py                   # Shared quarterly training/evaluation data
@@ -79,6 +82,7 @@ scripts/
   embed_recipes.py            # Save MiniLM or TF-IDF recipe inputs
   run_experiments.py          # Compare models on rolling validation/test tasks
   run_llm_baseline.py         # Zero-shot LLM baseline on val + test (GPU)
+  check_survey_models.py      # Verify A/B survey wrappers match each model's own recommend()
 pyproject.toml                # Shared dependencies and package configuration
 ```
 
@@ -197,6 +201,51 @@ evaluation logic in `src/remy/evaluate.py`. Keep `__init__.py` files empty; no
 base class or model registry is needed. Choose settings on validation and keep
 them fixed through the test run.
 
+### Make a model available in the A/B survey
+
+The survey (`remy.abtest`) uses models unchanged. It fits each model once with
+`fit(history, recipes=catalog, training_quarters=...)`, then serves a brand-new
+participant by temporarily adding them to the fitted model's **per-user state**,
+calling the model's own `recommend(user_id, k)`, and removing them again. All of
+this lives in a small wrapper class in `src/remy/abtest/models.py`:
+
+```python
+class MyModelSurvey(SurveyModel):
+    model_class = MyModel        # the class from src/remy/model/
+    supervised = False           # True if fit() needs training_quarters
+
+    def add_user(self, ratings):          # ratings: user_id, recipe_id, date, rating (one user)
+        super().add_user(ratings)         # sets model.seen_[user_id]
+        ...                               # add anything else recommend() looks up per user
+
+    def remove_user(self, user_id):
+        super().remove_user(user_id)      # undo add_user exactly
+        ...
+
+MODELS["mymodel"] = MyModelSurvey        # then use `type: mymodel` in config.yaml
+```
+
+To write `add_user`, look at what your `recommend(user_id)` reads that `fit`
+built from `interactions`, and build the same thing for the new user's rows.
+Reuse the model's own helper for this when it has one (see `LightGBMSurvey`).
+Learned item-side state (similarities, trees, rankings) is never touched.
+
+- If `recommend` only uses `seen_` (like Popularity), set `model_class` and stop
+  there.
+- KNN adds a row to its user-item matrix.
+- LightGBM adds rows to its user feature table and tag-taste matrices.
+
+Then check that the wrapper serves new users exactly like the model does:
+
+```bash
+uv run python scripts/check_survey_models.py --models mymodel
+```
+
+The check copies real training users into a new user and requires identical
+recommendations and fully restored model state. Fitted models are cached by
+cutoff, params and a hash of the model's source file, so editing a model makes
+the survey refit it automatically.
+
 ## File paths
 
 Use the shared root to build paths from any script or notebook:
@@ -232,37 +281,130 @@ and full-NDCG numbers mostly reflect the popularity fallback after those 10.
 
 ## Blind A/B survey
 
-`remy.abtest` is a small FastAPI web app for human evaluation. Each participant:
+`remy.abtest` is a small FastAPI web app for human evaluation of two recommenders.
+Each participant:
 
-1. Rates a few popular recipes, spread across courses, from 1 to 5 stars. This is the cold-start quiz.
-2. Sees two lists side by side, one from each of two recommenders, without being told which is which.
-3. Rates every recipe in both lists, rates each list overall, and optionally picks the list they prefer.
+1. Rates a short cold-start quiz of popular recipes, spread across courses, from 1 to 5 stars.
+   The `n_recs` most-reviewed recipes are skipped, so Popularity can always show its true top picks.
+2. Sees two lists side by side, "List 1" and "List 2", one from each model.
+   Which model goes on the left is random, and model names never reach the browser.
+3. Rates every recipe, rates each list overall, and says which list they'd rather cook from.
 
-Each completed survey is appended as one JSON line to `data/processed/abtest/responses.jsonl`. The line records:
+### How it works
 
-- the user's ID and timestamps
-- the training cutoff, both models and their params
-- the quiz ratings
-- both lists, with each list's model, side, overall rating and the rank and rating of every item
-- the participant's preferred model
+- **Training.** At startup, each model is fit once on `RollingSplits` data before `train_cutoff`,
+  using its normal `fit`. Fitted models are cached in `data/processed/abtest/models/`,
+  so later restarts take seconds.
+- **Serving a participant.** Their quiz answers become rows in the usual interactions schema.
+  The model's wrapper (`remy/abtest/models.py`) adds them to the fitted model's per-user state,
+  calls the model's own `recommend`, and removes them. Each request takes a few to about 100 ms.
+  See "Make a model available in the A/B survey" above.
+- **Sessions.** In-progress surveys live in memory and are lost if the server restarts.
+  Every run of the survey is a new user. The thank-you page offers "Take it again".
+- **Output.** Each completed survey is appended as one JSON line to
+  `data/processed/abtest/responses.jsonl`. The line records:
+  - user ID and optional `external_id`
+  - timestamps
+  - cutoff, both models and their params
+  - quiz ratings
+  - both lists, with each list's model, side and overall rating, and every item's rank and rating
+  - the preferred model
 
-In-progress surveys live in memory, so they are lost if the server restarts. Every run of the survey is treated as a new user.
+### Configure
 
-Models are fit once, at startup, on reviews before `train_cutoff`. The fitted models are cached under `data/processed/abtest/models/`. Model code is not changed. A wrapper (`remy/abtest/models.py`) adds the participant's quiz ratings to the fitted model's per-user state, calls the model's own `recommend`, and then removes them.
+Edit `src/remy/abtest/config.yaml`:
 
-Settings live in `src/remy/abtest/config.yaml`: the two models (popularity vs. default LightGBM) and their params, the cutoff, the quiz and list sizes, and the output path. Run the app after `make_splits.py`:
+- `train_cutoff`
+- the two models (`models.a` / `models.b`: `type` from `MODELS` plus constructor `params`)
+- the quiz and list sizes
+- whether to show community stats
+- the output paths
+
+To use another file, set `REMY_ABTEST_CONFIG=/path/to/config.yaml`. To record an external participant ID
+(e.g. a class roster ID), add `?pid=<id>` to the invite link.
+
+### Run locally
+
+The app needs `data/processed/rolling/`, made by `download_data.py` then `make_splits.py`.
 
 ```bash
 uv sync --extra abtest
-uv run uvicorn remy.abtest.app:app --host 0.0.0.0 --port 8000
+uv run uvicorn remy.abtest.app:app --port 8000      # then open http://localhost:8000
 ```
 
-Optional settings:
+The first start fits the models: about 2 minutes for Popularity plus LightGBM at the 2016 cutoff.
+Wait for `Survey ready` in the log. `GET /healthz` returns `{"ok": true}` once the app is serving.
 
-- Set `REMY_ABTEST_CONFIG=path/to/other.yaml` to use another config file.
-- Add `?pid=<id>` to the invite link to store an external participant ID.
+### Deploy
 
-To load the results:
+Requirements, whatever the host:
+
+- **One process.** Surveys in progress are held in memory. Run a single uvicorn worker
+  (no `--workers N`, no multiple replicas). One process handles many concurrent participants.
+- **About 4 GB of RAM** for the training data and fitted models (about 3 GB measured when loading cached models; the first LightGBM fit needs more headroom). Also about 3 GB of disk
+  for the Python environment, the rolling data and the model cache.
+- **A persistent disk** for `responses.jsonl` and the model cache. Hosts with ephemeral disks
+  lose responses on every restart.
+- **The data.** Either run `download_data.py` and `make_splits.py` on the host
+  (needs Kaggle credentials), or copy `data/processed/rolling/` there.
+  Also copy `data/processed/abtest/models/` to skip the first fit; this needs the same package versions.
+- **HTTPS** if participants join over the internet.
+
+The options, from least to most setup:
+
+| Option | Good for | Notes |
+|---|---|---|
+| **Laptop + tunnel** | A pilot or a short, supervised study | Run the app locally, then expose it with `cloudflared tunnel --url http://localhost:8000` (Cloudflare Tunnel, free) or `ngrok http 8000`. You get an HTTPS URL to share. The laptop must stay awake and online. |
+| **A small VM** (lab or university server, AWS Lightsail/EC2, GCP, DigitalOcean; 4 GB RAM) | A study that runs for days or weeks | The most robust option; setup is below. |
+| **PaaS with a persistent disk** (Render web service + disk, Fly.io + volume) | If you'd rather not manage a server | Choose an instance with at least 4 GB of RAM. Put `data/processed/` on the mounted disk: set `responses_path` and `model_cache_dir` there, and upload the rolling data to it or symlink. Start command: `uvicorn remy.abtest.app:app --host 0.0.0.0 --port $PORT`. |
+
+Avoid free or serverless hosts (Hugging Face Spaces free tier, Streamlit Cloud, Vercel, Lambda).
+Their disks are wiped, memory is too small, and in-memory sessions don't survive between requests.
+
+VM setup (Ubuntu):
+
+```bash
+# 1. Code, environment and data
+git clone <repo-url> remy && cd remy
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync --extra abtest
+rsync -a <laptop>:remy/data/processed/rolling/ data/processed/rolling/   # or download_data.py + make_splits.py
+
+# 2. Keep it running across logouts and reboots (or use tmux for a quick test)
+sudo tee /etc/systemd/system/remy-survey.service >/dev/null <<UNIT
+[Unit]
+Description=Remy A/B survey
+After=network.target
+[Service]
+WorkingDirectory=$PWD
+ExecStart=$PWD/.venv/bin/uvicorn remy.abtest.app:app --host 127.0.0.1 --port 8000 --proxy-headers
+Restart=on-failure
+User=$USER
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo systemctl enable --now remy-survey
+journalctl -u remy-survey -f        # wait for "Survey ready"
+
+# 3. HTTPS: point a DNS name at the VM, then let Caddy fetch a certificate
+sudo apt install -y caddy
+echo 'survey.example.org {
+  reverse_proxy localhost:8000
+}' | sudo tee /etc/caddy/Caddyfile && sudo systemctl reload caddy
+```
+
+While the study runs:
+
+- **Back up the results.** Copy `data/processed/abtest/responses.jsonl` off the machine regularly,
+  for example with a daily `rsync` or `cron` job.
+- **Changing the config.** Changing `config.yaml` mid-study needs a restart.
+  The analysis notebook keeps only the most recent config's responses.
+
+### Analyse
+
+Open `notebooks/abtest_analysis.ipynb`. It runs paired, per-participant comparisons with CIs,
+paired t and Wilcoxon tests, preference sign tests, rating-by-rank plots and sanity checks.
+Set `REMY_ABTEST_RESPONSES` to point it at another file. To load the data directly:
 
 ```python
 import pandas as pd
@@ -271,9 +413,3 @@ from remy.abtest.responses import load_responses
 raw = pd.read_json("data/processed/abtest/responses.jsonl", lines=True)  # one row per survey
 items = load_responses("data/processed/abtest/responses.jsonl")           # one row per rated recommendation
 ```
-
-To make another model available, subclass `SurveyModel` in `remy/abtest/models.py` and register it in `MODELS`:
-
-- Set `model_class`.
-- Set `supervised = True` if `fit` needs training quarters.
-- Override `add_user`/`remove_user` if the model keeps per-user state beyond `seen_`.
