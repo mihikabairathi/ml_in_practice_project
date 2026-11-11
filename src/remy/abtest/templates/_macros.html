@@ -1,0 +1,52 @@
+{% macro stars(name, label, size="md") -%}
+<fieldset class="stars stars-{{ size }}">
+  <legend class="sr-only">{{ label }}</legend>
+  {%- for v in [5, 4, 3, 2, 1] %}
+  <input type="radio" id="{{ name }}_{{ v }}" name="{{ name }}" value="{{ v }}" required>
+  <label for="{{ name }}_{{ v }}" title="{{ v }} star{{ 's' if v > 1 }}"><span class="sr-only">{{ v }} star{{ 's' if v > 1 }}</span><span aria-hidden="true">★</span></label>
+  {%- endfor %}
+</fieldset>
+{%- endmacro %}
+
+{% macro steps_nav(current) -%}
+<ol class="progress">
+  <li class="{{ 'on' if current == 1 else 'past' if current > 1 }}">1 · Your taste</li>
+  <li class="{{ 'on' if current == 2 else 'past' if current > 2 }}">2 · Compare lists</li>
+</ol>
+{%- endmacro %}
+
+{% macro card(r, show_stats=false) -%}
+<article class="card">
+  <div class="card-top">
+    <span class="course">{{ r.course }}</span>
+    {% if show_stats and r.avg_rating %}<span class="community">★ {{ r.avg_rating }} · {{ "{:,}".format(r.n_reviews) }} reviews</span>{% endif %}
+  </div>
+  <h3>{{ r.name }}</h3>
+  <ul class="meta">
+    {% if r.time %}<li><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>{{ r.time }}</li>{% endif %}
+    <li>{{ r.n_ingredients }} ingredients</li>
+    <li>{{ r.n_steps }} steps</li>
+    {% if r.calories is not none %}<li>{{ r.calories }} kcal</li>{% endif %}
+  </ul>
+  {% if r.description %}<p class="desc">{{ r.description }}</p>{% endif %}
+  {% if r.tags %}<ul class="chips">{% for t in r.tags %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
+  <div class="nutrition" aria-label="Percent daily value per serving">
+    {% for n in r.nutrients %}
+    <div class="nutrient n{{ loop.index }}">
+      <span class="label">{{ n.label }}</span>
+      <span class="bar"><span style="width: {{ [n.pdv, 100] | min }}%"></span></span>
+      <span class="pdv">{{ n.pdv }}%</span>
+    </div>
+    {% endfor %}
+  </div>
+  <details>
+    <summary>Ingredients</summary>
+    <ul class="ingredients">{% for i in r.ingredients %}<li>{{ i }}</li>{% endfor %}</ul>
+  </details>
+  <details>
+    <summary>Steps</summary>
+    <ol class="method">{% for s in r.steps %}<li>{{ s }}</li>{% endfor %}</ol>
+  </details>
+  <div class="rate">{{ caller() }}</div>
+</article>
+{%- endmacro %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_macros.html" import card, stars, steps_nav %}
+{% block title %}Your taste · Recipe taste study{% endblock %}
+{% block steps %}{{ steps_nav(1) }}{% endblock %}
+{% block content %}
+<div class="intro">
+  <h1>How much would you want to make or eat these?</h1>
+  <p>1 star means “not for me” and 5 stars means “I'd love this”. Open Ingredients or Steps for more detail.</p>
+</div>
+<form method="post" action="/quiz" id="survey">
+  <div class="grid">
+    {% for r in cards %}
+      {% call card(r, survey.show_community_stats) %}{{ stars("r_" ~ r.id, "Your rating for " ~ r.name) }}{% endcall %}
+    {% endfor %}
+  </div>
+  <div class="submit-bar">
+    <span class="count" data-total="{{ cards | length }}"></span>
+    <button class="button" type="submit">See my recommendations</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}{% include "_count.html" %}{% endblock %}

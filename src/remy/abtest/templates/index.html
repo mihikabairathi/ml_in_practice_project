@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero panel">
+  <h1>Help us find recipes you'll love</h1>
+  <p class="lead">We're comparing different ways of recommending recipes. It takes about 5 minutes.</p>
+  <ol class="how">
+    <li><strong>Tell us your taste.</strong> Rate {{ survey.n_quiz }} recipes from 1 to 5 stars by how much you'd want to make or eat them.</li>
+    <li><strong>Compare two lists.</strong> We'll show you two lists of {{ survey.n_recs }} recipes picked for you. Rate each recipe, then each list as a whole.</li>
+  </ol>
+  <p class="fine">We only store your ratings and an anonymous ID. You haven't cooked these recipes, so go with your gut.</p>
+  <div class="actions">
+    {% if resume and resume != "/done" %}
+    <a class="button" href="{{ resume }}">Continue where you left off</a>
+    {% endif %}
+    <form method="post" action="/start">
+      <input type="hidden" name="external_id" value="{{ external_id or '' }}">
+      <button class="button {{ 'secondary' if resume and resume != '/done' }}" type="submit">{{ 'Start over' if resume and resume != '/done' else 'Start' }}</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

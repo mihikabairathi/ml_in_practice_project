@@ -229,3 +229,40 @@ A full val + test run takes roughly 8-10 GPU hours with Qwen3-8B on one L40S. Re
 same `--run-dir` resumes after the last finished quarter. Only 10 recipes are
 returned per user, so compare models on HR@10, Recall@10 and NDCG@10; the @100
 and full-NDCG numbers mostly reflect the popularity fallback after those 10.
+
+## Blind A/B survey
+
+`remy.abtest` is a small FastAPI web app for human evaluation. Each participant:
+
+1. Rates a few popular recipes, spread across courses, from 1 to 5 stars. This is the cold-start quiz.
+2. Sees two lists side by side, one from each of two recommenders, without being told which is which.
+3. Rates every recipe in both lists, rates each list overall, and optionally picks the list they prefer.
+
+Responses go to SQLite, along with which model produced each list, which side it was shown on, and each item's rank.
+
+Models are fit once, at startup, on reviews before `train_cutoff`. The fitted models are cached under `data/processed/abtest/models/`. Model code is not changed. A wrapper (`remy/abtest/models.py`) adds the participant's quiz ratings to the fitted model's per-user state, calls the model's own `recommend`, and then removes them.
+
+Settings live in `src/remy/abtest/config.yaml`: the two models and their params, the cutoff, the quiz and list sizes, and the database path. Run the app after `make_splits.py`:
+
+```bash
+uv sync --extra abtest
+uv run uvicorn remy.abtest.app:app --host 0.0.0.0 --port 8000
+```
+
+Optional settings:
+
+- Set `REMY_ABTEST_CONFIG=path/to/other.yaml` to use another config file.
+- Add `?pid=<id>` to the invite link to store an external participant ID.
+
+To load the results into DataFrames:
+
+```python
+from remy.abtest.db import load_responses
+tables = load_responses("data/processed/abtest/responses.sqlite")
+```
+
+To make another model available, subclass `SurveyModel` in `remy/abtest/models.py` and register it in `MODELS`:
+
+- Set `model_class`.
+- Set `supervised = True` if `fit` needs training quarters.
+- Override `add_user`/`remove_user` if the model keeps per-user state beyond `seen_`.

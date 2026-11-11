@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_macros.html" import card, stars, steps_nav %}
+{% block title %}Compare lists · Recipe taste study{% endblock %}
+{% block steps %}{{ steps_nav(2) }}{% endblock %}
+{% block content %}
+<div class="intro">
+  <h1>Two lists picked for you</h1>
+  <p>Rate each recipe by how much you'd want to make or eat it, then rate each list as a whole.</p>
+</div>
+<form method="post" action="/compare" id="survey">
+  <div class="columns">
+    {% for side in ["left", "right"] %}
+    {% set n = loop.index %}
+    <section class="list list-{{ n }}">
+      <header class="list-head"><h2>List {{ n }}</h2><span>{{ lists[side] | length }} recipes</span></header>
+      {% for r in lists[side] %}
+        {% call card(r, survey.show_community_stats) %}{{ stars("item_" ~ side ~ "_" ~ r.rank, "Your rating for " ~ r.name ~ " in list " ~ n) }}{% endcall %}
+      {% endfor %}
+      <div class="overall panel">
+        <p>Overall, how good is <strong>List {{ n }}</strong> for you?</p>
+        {{ stars("list_" ~ side, "Overall rating for list " ~ n, "lg") }}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+  {% if survey.ask_preference %}
+  <fieldset class="preference panel">
+    <legend>If you could only cook from one list, which would it be?</legend>
+    <div class="pills">
+      <input type="radio" id="pref_left" name="preference" value="left" required><label for="pref_left">List 1</label>
+      <input type="radio" id="pref_none" name="preference" value="none"><label for="pref_none">No preference</label>
+      <input type="radio" id="pref_right" name="preference" value="right"><label for="pref_right">List 2</label>
+    </div>
+  </fieldset>
+  {% endif %}
+  <div class="submit-bar">
+    <span class="count"></span>
+    <button class="button" type="submit">Submit my ratings</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}{% include "_count.html" %}{% endblock %}

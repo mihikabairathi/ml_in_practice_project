@@ -1,0 +1,15 @@
+<script>
+  // Progress counter only; the form's `required` radios do the real validation.
+  (() => {
+    const form = document.getElementById("survey");
+    const out = form.querySelector(".count");
+    const groups = [...new Set([...form.querySelectorAll("input[type=radio]")].map(i => i.name))];
+    const update = () => {
+      const done = groups.filter(n => form.querySelector(`input[name="${n}"]:checked`)).length;
+      out.textContent = `${done} of ${groups.length} answered`;
+      out.classList.toggle("complete", done === groups.length);
+    };
+    form.addEventListener("change", update);
+    update();
+  })();
+</script>
