@@ -22,7 +22,8 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+/* Keep focused or invalid fields clear of the sticky submit bar when the browser scrolls to them */
+html { -webkit-text-size-adjust: 100%; scroll-padding-bottom: 110px; }
 body {
   margin: 0;
   background: var(--bg);
@@ -49,7 +50,8 @@ header.site .wrap {
 .progress li.on { background: var(--mint); color: var(--ink); font-weight: 600; }
 .progress li.past { color: var(--ink); }
 
-main { padding-top: 28px; padding-bottom: 120px; }
+/* main.wrap (not main) so .wrap's padding shorthand doesn't reset this; leaves room for the submit bar */
+main.wrap { padding-top: 28px; padding-bottom: 140px; }
 
 /* Panels and intro */
 .panel { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; }
@@ -100,6 +102,8 @@ main { padding-top: 28px; padding-bottom: 120px; }
 .chips li { background: var(--peach); color: #4A3A33; font-size: 12px; padding: 2px 10px; border-radius: 999px; }
 
 /* Nutrition: % daily value bars */
+.nutrition-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--faint); margin-bottom: -4px; }
+.nutrition-head abbr { text-decoration: underline dotted; cursor: help; }
 .nutrition { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; font-size: 12px; color: var(--muted); }
 .nutrient { display: grid; grid-template-columns: 52px 1fr 36px; align-items: center; gap: 6px; }
 .nutrient .bar { height: 6px; background: var(--surface-soft); border-radius: 3px; overflow: hidden; }

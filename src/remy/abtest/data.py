@@ -80,7 +80,10 @@ def _sentence(text: str) -> str:
 
 def _title(name: str) -> str:
     """Names lost their apostrophes ("kittencal s meatballs"); restore them and title-case."""
-    return string.capwords(re.sub(r"(\w) s\b", r"\1's", _clean(name)))
+    name = re.sub(r"(\w) s\b", r"\1's", _clean(name))                 # kittencal s -> kittencal's
+    name = re.sub(r"\b(\w+n) t\b", r"\1't", name)                     # don t -> don't
+    name = re.sub(r"\b(I|you|we|they) (ll|re|ve|m)\b", r"\1'\2", name, flags=re.I)
+    return string.capwords(name)
 
 
 def _truncate(text: str, limit: int = 220) -> str:
