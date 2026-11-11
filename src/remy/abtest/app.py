@@ -42,7 +42,9 @@ async def lifespan(app: FastAPI):
         wrapper.fit_or_load(data, config.model_cache_dir)
     app.state.config = config
     app.state.models = {config.model_label(k): w for k, w in wrappers.items()}
-    app.state.book = RecipeBook(data, config.survey.quiz_pool_size)
+    app.state.book = RecipeBook(
+        data, config.survey.quiz_pool_size, skip_top=config.survey.n_recs
+    )
     app.state.db = Database(config.db_path)
     log.info("Survey ready: %s vs %s", *app.state.models)
     yield

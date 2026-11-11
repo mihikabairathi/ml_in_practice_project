@@ -242,7 +242,7 @@ Responses go to SQLite, along with which model produced each list, which side it
 
 Models are fit once, at startup, on reviews before `train_cutoff`. The fitted models are cached under `data/processed/abtest/models/`. Model code is not changed. A wrapper (`remy/abtest/models.py`) adds the participant's quiz ratings to the fitted model's per-user state, calls the model's own `recommend`, and then removes them.
 
-Settings live in `src/remy/abtest/config.yaml`: the two models and their params, the cutoff, the quiz and list sizes, and the database path. Run the app after `make_splits.py`:
+Settings live in `src/remy/abtest/config.yaml`: the two models (popularity vs. default LightGBM) and their params, the cutoff, the quiz and list sizes, and the database path. Run the app after `make_splits.py`:
 
 ```bash
 uv sync --extra abtest

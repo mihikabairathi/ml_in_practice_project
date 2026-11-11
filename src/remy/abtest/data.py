@@ -54,6 +54,11 @@ class TrainingData:
 
 def load_training_data(cutoff: dt.date, supervised: bool) -> TrainingData:
     splits = RollingSplits()
+    # Drop malformed tags such as "less_thansql:name_topics_of_recipegreater_than"
+    # (one 2011 recipe): LightGBM rejects JSON characters in feature names.
+    splits.recipes["tags"] = splits.recipes["tags"].map(
+        lambda tags: [t for t in tags if t and not re.search(r'[":,\[\]{}\\]', t)]
+    )
     cutoff = pd.Timestamp(cutoff)
     last = splits.windows["end"].max()
     if cutoff > last:
@@ -99,7 +104,10 @@ def format_minutes(minutes: int) -> str | None:
 class RecipeBook:
     """Turns recipe rows into display-ready card dicts and samples quiz recipes."""
 
-    def __init__(self, data: TrainingData, quiz_pool_size: int):
+    def __init__(self, data: TrainingData, quiz_pool_size: int, skip_top: int = 0):
+        """Quiz recipes come from the `quiz_pool_size` most-reviewed recipes after
+        skipping the `skip_top` most-reviewed, so the popularity baseline's top
+        recommendations are never used up by the quiz."""
         history = data.history
         rated = history[history["rating"] > 0]
         self.n_reviews = history["recipe_id"].value_counts()
@@ -108,9 +116,13 @@ class RecipeBook:
         tag_counts = self.recipes["tags"].explode().value_counts()
         self.tag_counts = tag_counts[tag_counts >= MIN_TAG_COUNT]
 
-        top = self.n_reviews.reindex(self.recipes.index, fill_value=0).nlargest(quiz_pool_size)
+        # Same ordering as remy.model.popularity.Popularity: review count, ties by id.
+        ranking = (
+            self.n_reviews.reindex(self.recipes.index, fill_value=0)
+            .sort_index().sort_values(ascending=False, kind="stable").index
+        )
         self.quiz_pool: dict[str, list[int]] = {}
-        for recipe_id in top.index:
+        for recipe_id in ranking[skip_top:skip_top + quiz_pool_size]:
             self.quiz_pool.setdefault(self.course(recipe_id), []).append(int(recipe_id))
 
     def course(self, recipe_id: int) -> str:

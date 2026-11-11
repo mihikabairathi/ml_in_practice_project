@@ -11,7 +11,8 @@ model_cache_dir: data/processed/abtest/models
 survey:
   n_quiz: 10                    # cold-start recipes the participant rates
   n_recs: 6                     # recipes shown in each of the two lists
-  quiz_pool_size: 300           # quiz recipes are sampled from the top-N most reviewed
+  quiz_pool_size: 300           # quiz recipes are sampled from the top-N most reviewed,
+                                # after skipping the n_recs most reviewed (popularity's picks)
   show_community_stats: false   # average rating / review count on cards (hints at popularity)
   ask_preference: true          # final "which list would you rather cook from?"
 
@@ -23,5 +24,5 @@ models:
     type: popularity
     params: {}
   b:
-    type: knn
-    params: {k_neighbors: 50, min_rating: 5.0, n_candidates: 1000}
+    type: lightgbm
+    params: {}                  # LightGBM defaults; trains on all quarters before train_cutoff
