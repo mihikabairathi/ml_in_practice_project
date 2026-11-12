@@ -116,8 +116,8 @@ main.wrap { padding-top: 28px; padding-bottom: 140px; }
 .chips li { background: var(--peach); color: #4A3A33; font-size: 12px; padding: 2px 10px; border-radius: 999px; }
 
 /* Nutrition: % daily value bars */
-.nutrition-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--faint); margin-bottom: -4px; }
-.nutrition-head abbr { text-decoration: underline dotted; cursor: help; }
+.nutrition-head { font-size: 10.5px; letter-spacing: .02em; color: #9A9893; margin-bottom: -6px; }
+.nutrition-head abbr { text-decoration: none; cursor: help; }
 .nutrition { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; font-size: 12px; color: var(--muted); }
 .nutrient { display: grid; grid-template-columns: 52px 1fr 36px; align-items: center; gap: 6px; }
 .nutrient .bar { height: 6px; background: var(--surface-soft); border-radius: 3px; overflow: hidden; }

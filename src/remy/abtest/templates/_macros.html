@@ -36,8 +36,7 @@
   {% endif %}
   {% if r.tags %}<ul class="chips">{% for t in r.tags %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
   <div class="nutrition-head">
-    <span>Nutrition per serving</span>
-    <abbr title="Percent of the recommended daily amount for an adult (2,000 kcal diet) in one serving. Over 100% means more than a full day's worth.">% Daily Value</abbr>
+    <abbr title="Percent of an adult's recommended daily amount (2,000 kcal diet) in one serving. Over 100% means more than a full day's worth.">% daily value per serving</abbr>
   </div>
   <div class="nutrition" aria-label="Percent daily value per serving">
     {% for n in r.nutrients %}

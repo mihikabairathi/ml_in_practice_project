@@ -5,6 +5,7 @@ Run from the repository root:  uv run uvicorn remy.abtest.app:app --port 8000
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import random
 import secrets
@@ -58,6 +59,20 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Remy recipe survey", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
+
+
+def _static_version() -> str:
+    """Hash of the static files, appended to their URLs so browsers fetch new
+    versions after an update instead of reusing a stale cached copy."""
+    digest = hashlib.sha1()
+    for path in sorted((HERE / "static").rglob("*")):
+        if path.is_file():
+            digest.update(path.read_bytes())
+    return digest.hexdigest()[:10]
+
+
+STATIC_VERSION = _static_version()
+templates.env.globals["asset"] = lambda path: f"/static/{path}?v={STATIC_VERSION}"
 
 STAGE_PAGES = {"quiz": "/quiz", "compare": "/compare", "done": "/done"}
 
