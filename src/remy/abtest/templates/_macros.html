@@ -21,20 +21,19 @@
     <span class="course">{{ r.course }}</span>
     {% if show_stats and r.avg_rating %}<span class="community">★ {{ r.avg_rating }} · {{ "{:,}".format(r.n_reviews) }} reviews</span>{% endif %}
   </div>
-  <h3>{{ r.name }}</h3>
+  <h3 title="{{ r.name }}">{{ r.name }}</h3>
   <ul class="meta">
     {% if r.time %}<li><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>{{ r.time }}</li>{% endif %}
     <li>{{ r.n_ingredients }} ingredients</li>
     <li>{{ r.n_steps }} steps</li>
     {% if r.calories is not none %}<li>{{ r.calories }} kcal</li>{% endif %}
   </ul>
-  {% if r.description %}
+  {# Every card reserves the same space for each part, so cards are the same size. #}
   <div class="desc-wrap">
     <p class="desc">{{ r.description }}</p>
     <p class="desc-full" aria-hidden="true">{{ r.description }}</p>
   </div>
-  {% endif %}
-  {% if r.tags %}<ul class="chips">{% for t in r.tags %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
+  <ul class="chips">{% for t in r.tags %}<li>{{ t }}</li>{% endfor %}</ul>
   <div class="nutrition-head">
     <abbr title="Percent of an adult's recommended daily amount (2,000 kcal diet) in one serving. Over 100% means more than a full day's worth.">% daily value per serving</abbr>
   </div>

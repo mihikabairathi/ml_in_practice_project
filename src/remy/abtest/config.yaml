@@ -16,7 +16,7 @@ survey:
   quiz_pool_size: 300           # quiz recipes are sampled from the top-N most reviewed,
                                 # after skipping the n_recs most reviewed (popularity's picks)
   show_community_stats: false   # average rating / review count on cards (hints at popularity)
-  ask_preference: true          # final "which list would you rather cook from?"
+  ask_preference: false         # final "which list would you rather cook from?" question
 
 # Exactly two models, a and b. These keys are internal labels; participants only
 # see "List 1" / "List 2", and which model goes on the left is random per participant.

@@ -289,7 +289,7 @@ Each participant:
    The `n_recs` most-reviewed recipes are skipped, so Popularity can always show its true top picks.
 2. Sees two lists side by side, "List 1" and "List 2", one from each model.
    Which model goes on the left is random, and model names never reach the browser.
-3. Rates every recipe, rates each list overall, and says which list they'd rather cook from.
+3. Rates every recipe and rates each list overall. An optional final question asking which list they'd rather cook from is off by default (`survey.ask_preference`).
 
 ### How it works
 
