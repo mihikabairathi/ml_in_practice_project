@@ -49,7 +49,8 @@ async def lifespan(app: FastAPI):
     app.state.book = RecipeBook(
         data, config.survey.quiz_pool_size, skip_top=config.survey.n_recs
     )
-    app.state.log = ResponseLog(config.responses_path)
+    app.state.log = ResponseLog(config.responses_dir)
+    log.info("Completed surveys will be written to %s", app.state.log.path)
     log.info("Survey ready: %s vs %s", *app.state.models)
     yield
 

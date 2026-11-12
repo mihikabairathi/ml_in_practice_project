@@ -302,14 +302,18 @@ Each participant:
   See "Make a model available in the A/B survey" above.
 - **Sessions.** In-progress surveys live in memory and are lost if the server restarts.
   Every run of the survey is a new user. The thank-you page offers "Take it again".
-- **Output.** Each completed survey is appended as one JSON line to
-  `data/processed/abtest/responses.jsonl`. The line records:
+- **Output.** Each server start writes to its own file,
+  `data/processed/abtest/responses/responses_<YYYYmmdd-HHMMSS>.jsonl` (UTC).
+  The file is created when the first survey is completed, so restarts with no participants leave no empty files.
+  The log prints the file name at startup.
+  Each completed survey is appended as one JSON line. The line records:
   - user ID and optional `external_id`
   - timestamps
   - cutoff, both models and their params
   - quiz ratings
   - both lists, with each list's model, side and overall rating, and every item's rank and rating
   - the preferred model
+  - `server_started_at`, so a line can be traced back to its deployment
 
 ### Configure
 
@@ -344,17 +348,17 @@ You need the data from `download_data.py` and `make_splits.py`, plus `uv sync --
    ```bash
    uv run uvicorn remy.abtest.app:app --port 8000
    ```
-   Your test answers go to `data/processed/abtest/responses.jsonl`, the same file real participants use.
-   Delete it before the real study starts.
+   Your test answers go to a new file in `data/processed/abtest/responses/`, the same folder real
+   participants' files go to. Delete or move your test files before the real study starts.
 2. **Generate sample data.** Simulated participants with hidden tastes go through the real app,
-   using the models in `config.yaml`. Their responses go to a separate file,
-   `data/processed/abtest/sample_responses.jsonl`, so real data is never mixed in.
+   using the models in `config.yaml`. Their responses go to a separate folder,
+   `data/processed/abtest/sample_responses/`, one new timestamped file per run, so real data is never mixed in.
    ```bash
    uv run python scripts/simulate_survey.py -n 50
    ```
 3. **Analyse the sample.** Point the notebook at the sample file. The command is also printed by the script.
    ```bash
-   REMY_ABTEST_RESPONSES=$PWD/data/processed/abtest/sample_responses.jsonl uv run jupyter lab notebooks/abtest_analysis.ipynb
+   REMY_ABTEST_RESPONSES=$PWD/data/processed/abtest/sample_responses uv run jupyter lab notebooks/abtest_analysis.ipynb
    ```
 
 For quicker iterations, set an earlier `train_cutoff` such as `2008-01-01` in a copy of the config
@@ -369,7 +373,7 @@ Requirements, whatever the host:
   (no `--workers N`, no multiple replicas). One process handles many concurrent participants.
 - **About 4 GB of RAM** for the training data and fitted models (about 3 GB measured when loading cached models; the first LightGBM fit needs more headroom). Also about 3 GB of disk
   for the Python environment, the rolling data and the model cache.
-- **A persistent disk** for `responses.jsonl` and the model cache. Hosts with ephemeral disks
+- **A persistent disk** for the `responses/` folder and the model cache. Hosts with ephemeral disks
   lose responses on every restart.
 - **The data.** Either run `download_data.py` and `make_splits.py` on the host
   (needs Kaggle credentials), or copy `data/processed/rolling/` there.
@@ -382,7 +386,7 @@ The options, from least to most setup:
 |---|---|---|
 | **Laptop + tunnel** | A pilot or a short, supervised study | Run the app locally, then expose it with `cloudflared tunnel --url http://localhost:8000` (Cloudflare Tunnel, free) or `ngrok http 8000`. You get an HTTPS URL to share. The laptop must stay awake and online. |
 | **A small VM** (lab or university server, AWS Lightsail/EC2, GCP, DigitalOcean; 4 GB RAM) | A study that runs for days or weeks | The most robust option; setup is below. |
-| **PaaS with a persistent disk** (Render web service + disk, Fly.io + volume) | If you'd rather not manage a server | Choose an instance with at least 4 GB of RAM. Put `data/processed/` on the mounted disk: set `responses_path` and `model_cache_dir` there, and upload the rolling data to it or symlink. Start command: `uvicorn remy.abtest.app:app --host 0.0.0.0 --port $PORT`. |
+| **PaaS with a persistent disk** (Render web service + disk, Fly.io + volume) | If you'd rather not manage a server | Choose an instance with at least 4 GB of RAM. Put `data/processed/` on the mounted disk: set `responses_dir` and `model_cache_dir` there, and upload the rolling data to it or symlink. Start command: `uvicorn remy.abtest.app:app --host 0.0.0.0 --port $PORT`. |
 
 Avoid free or serverless hosts (Hugging Face Spaces free tier, Streamlit Cloud, Vercel, Lambda).
 Their disks are wiped, memory is too small, and in-memory sessions don't survive between requests.
@@ -421,7 +425,7 @@ echo 'survey.example.org {
 
 While the study runs:
 
-- **Back up the results.** Copy `data/processed/abtest/responses.jsonl` off the machine regularly,
+- **Back up the results.** Copy the `data/processed/abtest/responses/` folder off the machine regularly,
   for example with a daily `rsync` or `cron` job.
 - **Changing the config.** Changing `config.yaml` mid-study needs a restart.
   The analysis notebook keeps only the most recent config's responses.
@@ -430,12 +434,15 @@ While the study runs:
 
 Open `notebooks/abtest_analysis.ipynb`. It runs paired, per-participant comparisons with CIs,
 paired t and Wilcoxon tests, preference sign tests, rating-by-rank plots and sanity checks.
-Set `REMY_ABTEST_RESPONSES` to point it at another file. To load the data directly:
+By default it reads every file in `data/processed/abtest/responses/`, so separate deployments are analysed together.
+If the cutoff or models changed between them, only the most recent setup is kept.
+Set `REMY_ABTEST_RESPONSES` to a single file to analyse one deployment, or to another folder.
+To load the data directly (each function accepts a file or a folder):
 
 ```python
 import pandas as pd
-from remy.abtest.responses import load_responses
+from remy.abtest.responses import load_responses, read_surveys
 
-raw = pd.read_json("data/processed/abtest/responses.jsonl", lines=True)  # one row per survey
-items = load_responses("data/processed/abtest/responses.jsonl")           # one row per rated recommendation
+surveys = read_surveys("data/processed/abtest/responses")   # one row per survey, plus a `file` column
+items = load_responses("data/processed/abtest/responses")   # one row per rated recommendation
 ```

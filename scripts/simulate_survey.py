@@ -7,7 +7,10 @@ Participants go through the real app (start -> quiz -> compare), using the
 models and settings in config.yaml, but responses go to a separate file.
 
     python scripts/simulate_survey.py                       # 40 participants
-    python scripts/simulate_survey.py -n 100 --output data/processed/abtest/sample.jsonl
+    python scripts/simulate_survey.py -n 100 --output-dir data/processed/abtest/my_samples
+
+Each run writes a new responses_<timestamp>.jsonl in the output folder, the same
+way each start of the real server does.
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ import yaml
 
 from remy.paths import PROJECT_ROOT
 
-DEFAULT_OUTPUT = PROJECT_ROOT / "data" / "processed" / "abtest" / "sample_responses.jsonl"
+DEFAULT_OUTPUT = PROJECT_ROOT / "data" / "processed" / "abtest" / "sample_responses"
 TASTE_TAGS = [
     "chicken", "beef", "pork", "seafood", "vegetarian", "pasta", "desserts", "breakfast",
     "mexican", "italian", "asian", "soups-stews", "salads", "chocolate", "breads",
@@ -36,8 +39,8 @@ def parse_args(argv=None):
     parser.add_argument("-n", "--participants", type=int, default=40)
     parser.add_argument("--retake-share", type=float, default=0.2,
                         help="Share of participants who take the survey twice (same ?pid=)")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT,
-                        help=f"Responses file (default: {DEFAULT_OUTPUT.relative_to(PROJECT_ROOT)})")
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT,
+                        help=f"Folder for the responses file (default: {DEFAULT_OUTPUT.relative_to(PROJECT_ROOT)})")
     parser.add_argument("--config", type=Path, help="Survey config (default: src/remy/abtest/config.yaml)")
     parser.add_argument("--seed", type=int, default=0)
     return parser.parse_args(argv)
@@ -46,10 +49,10 @@ def parse_args(argv=None):
 def main(argv=None):
     args = parse_args(argv)
 
-    # Same config as the real survey, but write responses to --output.
+    # Same config as the real survey, but write responses to --output-dir.
     from remy.abtest.config import DEFAULT_CONFIG
     config = yaml.safe_load((args.config or DEFAULT_CONFIG).read_text())
-    config["responses_path"] = str(args.output.resolve())
+    config["responses_dir"] = str(args.output_dir.resolve())
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
         yaml.safe_dump(config, f)
     os.environ["REMY_ABTEST_CONFIG"] = f.name
@@ -92,9 +95,9 @@ def main(argv=None):
             print(f"\r{n}/{len(runs)} surveys", end="", flush=True)
 
     os.unlink(f.name)
-    output = args.output.resolve()
-    print(f"\nWrote {len(runs)} surveys ({args.participants} participants) to {output}")
-    print(f"Analyse: REMY_ABTEST_RESPONSES={output} uv run jupyter lab notebooks/abtest_analysis.ipynb")
+    print(f"\nWrote {len(runs)} surveys ({args.participants} participants) to {app.state.log.path}")
+    print(f"Analyse every run in that folder:\n  REMY_ABTEST_RESPONSES={args.output_dir.resolve()} "
+          "uv run jupyter lab notebooks/abtest_analysis.ipynb")
 
 
 if __name__ == "__main__":

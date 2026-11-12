@@ -5,7 +5,9 @@
 train_cutoff: 2016-01-01
 
 # Relative paths resolve from the repository root.
-responses_path: data/processed/abtest/responses.jsonl   # one JSON line per completed survey
+# Each server start writes to its own file here: responses_<YYYYmmdd-HHMMSS>.jsonl
+# (created on the first completed survey; one JSON line per survey).
+responses_dir: data/processed/abtest/responses
 model_cache_dir: data/processed/abtest/models
 
 survey:
