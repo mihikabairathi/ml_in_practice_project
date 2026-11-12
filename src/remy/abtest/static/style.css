@@ -98,6 +98,20 @@ main.wrap { padding-top: 28px; padding-bottom: 140px; }
   margin: 0; font-size: 14px; color: var(--text);
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
+/* Full description: an overlay on top of the card, so nothing below it moves */
+.desc-wrap { position: relative; }
+.desc-wrap.truncated { cursor: zoom-in; border-radius: 6px; }
+.desc-wrap.truncated:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.desc-full {
+  display: none; position: absolute; z-index: 4; top: -10px; left: -12px; right: -12px;
+  margin: 0; padding: 10px 12px; font-size: 14px; color: var(--text);
+  background: var(--surface); border-radius: 10px; border: 1px solid var(--line);
+  box-shadow: 0 6px 24px rgba(18, 55, 68, .16);
+  max-height: 280px; overflow-y: auto;
+}
+.desc-wrap.truncated:hover .desc-full,
+.desc-wrap.truncated:focus .desc-full,
+.desc-wrap.truncated:focus-within .desc-full { display: block; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
 .chips li { background: var(--peach); color: #4A3A33; font-size: 12px; padding: 2px 10px; border-radius: 999px; }
 

@@ -28,7 +28,12 @@
     <li>{{ r.n_steps }} steps</li>
     {% if r.calories is not none %}<li>{{ r.calories }} kcal</li>{% endif %}
   </ul>
-  {% if r.description %}<p class="desc">{{ r.description }}</p>{% endif %}
+  {% if r.description %}
+  <div class="desc-wrap">
+    <p class="desc">{{ r.description }}</p>
+    <p class="desc-full" aria-hidden="true">{{ r.description }}</p>
+  </div>
+  {% endif %}
   {% if r.tags %}<ul class="chips">{% for t in r.tags %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
   <div class="nutrition-head">
     <span>Nutrition per serving</span>

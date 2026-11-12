@@ -86,7 +86,7 @@ def _title(name: str) -> str:
     return string.capwords(name)
 
 
-def _truncate(text: str, limit: int = 220) -> str:
+def _truncate(text: str, limit: int = 1200) -> str:
     return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
 
 

@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
 </head>
 <body>
@@ -17,6 +18,18 @@
     </div>
   </header>
   <main class="wrap">{% block content %}{% endblock %}</main>
+  <script>
+    // Descriptions show 3 lines; the cut-off ones reveal the full text on hover, tap or focus.
+    document.querySelectorAll(".desc-wrap").forEach(wrap => {
+      const desc = wrap.querySelector(".desc");
+      if (desc.scrollHeight > desc.clientHeight + 1) {
+        wrap.classList.add("truncated");
+        wrap.tabIndex = 0;
+        wrap.setAttribute("aria-label", "Show full description");
+        wrap.querySelector(".desc-full").removeAttribute("aria-hidden");
+      }
+    });
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

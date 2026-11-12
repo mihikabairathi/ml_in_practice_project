@@ -225,6 +225,11 @@ def done(request: Request):
     return templates.TemplateResponse(request, "done.html", {})
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return RedirectResponse("/static/favicon.svg", status_code=301)
+
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
