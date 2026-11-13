@@ -116,6 +116,3 @@ model.fit(quarter.history, quarter.recipes,
           splits.training_quarters(quarter.start), cutoff=quarter.start)
 recipes = model.recommend(int(quarter.users.user_id.iloc[0]), k=10)
 ```
-
-[Final averages](final_summary.csv) · [Final per-quarter metrics](final_quarterly.csv).
-The [earlier comparison](summary.csv) is retained for reference.
