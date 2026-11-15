@@ -131,7 +131,139 @@ python scripts/run_experiments.py --models lightgbm --split val \
 python scripts/run_experiments.py --models popularity knn lightgbm --split test
 ```
 
-Model settings exposed by the runner are:
+### Frozen comparison configurations
+
+`configs/frozen_models.toml` fixes the five non-LLM configurations from the
+submitted **Initial ML Solution** report, plus the later selected XGBoost.
+Each entry records its source, explicit parameters, and rounded validation
+reference scores. These scores describe the original runs; a short smoke test
+is not expected to reproduce the full validation means.
+
+| Config name | Fixed configuration |
+| --- | --- |
+| `popularity` | Lifetime review-count baseline |
+| `embedding` | Centered MiniLM name/ingredient similarity; 1,000 candidates |
+| `embedding_trained` | Joint MiniLM inputs, nonlinear 128-wide towers, softmax loss, 15 epochs, learning rate 0.001 |
+| `lightgbm` | Report's round-one all-features model, 200 rounds, 31 leaves, learning rate 0.05 |
+| `knn` | Report's popularity blend: 300 neighbors, shrinkage 20, CF weight 0.1, 1,000 candidates |
+| `xgboost` | Later selected MiniLM reranker, depth 5, 120 rounds |
+
+The report's KNN blend was recovered from commit `b61173a` on
+`knn-experiments`; its later default weight of 0.05 is overridden by the
+report's explicit 0.1. The report's LightGBM feature list is fixed explicitly
+because the current class defaults include additional feature groups. The
+newer LightGBM + MiniLM and Random Forest variants are not part of this set.
+The LLM is omitted to keep the comparison runnable locally.
+
+```bash
+# Inspect the selections without loading datasets, embeddings, or fitting models.
+python scripts/run_experiments.py --config configs/frozen_models.toml --describe-config
+
+# Generate the saved recipe embeddings once if they are not already available.
+python scripts/embed_recipes.py --device mps
+
+# Run all six fixed configurations on validation, preserving per-user predictions.
+python scripts/run_experiments.py --config configs/frozen_models.toml
+
+# Score a small, identical user sample for selected models at the first checkpoint.
+# --max-users limits prediction/evaluation work, not historical model training.
+python scripts/run_experiments.py --config configs/frozen_models.toml \
+  --models popularity embedding knn --max-quarters 1 --max-users 30
+
+# Keep the configurations fixed when running test.
+python scripts/run_experiments.py --config configs/frozen_models.toml --split test
+```
+
+With `--config`, `--models` selects named entries, while model-tuning CLI flags
+are rejected: change the config explicitly instead. Existing commands without
+`--config` retain the original popularity/KNN/LightGBM defaults. Configured
+embedding paths resolve from the repository root; `--embedding-dir` can select
+another directory, for example for a reduced-data check.
+
+Multi-model runs launch one fresh process per model and merge their outputs.
+This avoids mixing the native OpenMP runtimes used by PyTorch and the tree
+libraries on macOS. Each worker's `run.log` and metadata remain under `workers/`.
+A worker failure stops the run and preserves completed results and predictions.
+This runner does not resume a failed run automatically; use a fresh output
+directory for the remaining model names.
+
+Every run saves `run_config.json` (selected parameters, source hashes and package
+versions), checkpointed `results.csv`, and
+`recommendations/<quarter-start>/<model>.parquet`. Each prediction file has
+`user_id` and `recipe_ids`: by default the first 100 distinct, unseen recipes,
+completed using the evaluator's popularity fallback. Override the saved list
+length with `--save-top-k`. These files support substitute-matching, diversity
+and top-ten exposure metrics without refitting (see the resumable test job below).
+
+The scored users are the same positive-outcome users as the existing evaluator;
+`--max-users` draws a reproducible common sample for every model. Scores still
+use the same quarterly `evaluate_quarter` function. The model configs freeze
+settings, while each rolling checkpoint fits on its own available history.
+
+Run the configuration and integration checks with:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+### Resumable frozen-model test job
+
+The job below generates all MiniLM arrays, evaluates the six fixed models on
+all 20 test quarters and all scored users, and calculates the three approved
+top-ten diagnostics. It runs each model-quarter in its own process.
+
+```bash
+# Launch in the background. On macOS, caffeinate prevents idle sleep while it runs.
+python scripts/run_frozen_test.py --run-dir artifacts/frozen_test --detach
+
+# Show stage, current model/quarter, completed counts and embedding progress.
+python scripts/run_frozen_test.py --run-dir artifacts/frozen_test --status
+
+# Follow completed checkpoints and the current stage.
+tail -f artifacts/frozen_test/run.log
+```
+
+Rerun the exact launch command after an interruption. It resumes embedding
+generation from the last flushed 4,096-recipe chunk, and reuses checksummed
+prediction and metric checkpoints. The interrupted model-quarter may need to
+refit; earlier model-quarters do not. If only a diagnostic artifact is missing
+or damaged, the job reconstructs it from the saved predictions. Old failed
+attempts and their logs are preserved. A run-directory lock prevents duplicate
+jobs, and changes to model/evaluation code, data, library versions or embedding
+arrays are rejected rather than silently mixed into an existing run.
+
+The run directory contains:
+
+- `status.json`, `run.log`, `embeddings.log`, and `logs/`: progress and worker logs.
+- `config.toml`, `manifest.json`, `embedding_identity.json`: frozen settings and provenance.
+- `units/<model>/<quarter>/`: prediction checkpoints, per-user metrics and matched recipe IDs.
+- `quarter_metrics.csv`: original metrics plus the three diagnostics per model-quarter.
+- `summary.csv`: equal-weight means across completed quarters, with a completed-quarter count.
+- `resume_command.txt`: the exact background launch/restart command.
+
+Both CSV summaries update after each completed model-quarter. Partial summaries
+are marked by their completed-quarter counts; the status becomes `complete`
+only after all 120 model-quarters finish. The embedding arrays are shared under
+`data/processed/embeddings/minilm_joint/` with their own `progress.json`.
+
+The metric definitions are:
+
+- **Soft Recall@10:** coverage of held-out five-star recipes, with exact IDs
+  worth one and substitutes with similarity at least 0.8 worth their similarity.
+  Exact matches are locked first; remaining matches maximize total credit with
+  each recommended and held-out recipe used at most once.
+- **Diversity@10:** average pairwise dissimilarity within a user's top ten.
+  Similarity is the equally weighted mean of uncentered name and ingredient
+  cosine, clipped to [0,1], using frozen MiniLM vectors for both metrics.
+- **Top10 Exposure Share:** fraction of all users' top-ten slots occupied by
+  the ten most frequently shown recipe IDs. Ranks 11 and below never count.
+
+The same existing five-star-outcome cohort is used for all models in a quarter.
+Recall and diversity average over users within a quarter; exposure is computed
+across that quarter's users. All three then average quarters equally. Exact
+Recall@10 recovered from saved predictions must agree with the base evaluator.
+
+Model settings exposed by the original CLI are:
 
 | Model | Argument | Default | Meaning |
 | --- | --- | ---: | --- |

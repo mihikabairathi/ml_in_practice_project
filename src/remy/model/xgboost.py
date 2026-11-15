@@ -6,7 +6,7 @@ from scipy import sparse
 from sklearn.preprocessing import MultiLabelBinarizer, normalize
 
 from remy.model.embedding import EMBEDDING_DIR
-from remy.model.lightgbm_features import ALL_GROUPS, BASELINE_GROUPS, GROUP_COLS, LightGBM
+from remy.model.lightgbm import ALL_GROUPS, BASELINE_GROUPS, GROUP_COLS, LightGBM
 from remy.model.popularity import Popularity
 from remy.splits import MIN_REVIEWS
 
@@ -19,10 +19,11 @@ class _RecipeContent:
     fields = ("name", "ingredients")
     columns = ("name_profile_cosine", "ingredients_profile_cosine", "recent_best_cosine")
 
-    def __init__(self):
-        ids = np.load(EMBEDDING_DIR / "id.npy")
+    def __init__(self, embeddings=None):
+        ids = np.load(EMBEDDING_DIR / "id.npy") if embeddings is None else embeddings["id"]
         self.rows = pd.Series(np.arange(len(ids), dtype=np.int32), index=ids)
-        self.raw = [np.load(EMBEDDING_DIR / f"{field}.npy", mmap_mode="r") for field in self.fields]
+        self.raw = [np.load(EMBEDDING_DIR / f"{field}.npy", mmap_mode="r")
+                    if embeddings is None else embeddings[field] for field in self.fields]
         self.normalized = [normalize(np.asarray(vectors, dtype=np.float32)) for vectors in self.raw]
 
     def profile(self, history, available):
@@ -78,8 +79,8 @@ class _RecipeContent:
 class _TreeReranker(LightGBM):
     """Reuse the recipe features and historical sampling from LightGBM."""
 
-    def __init__(self, feature_groups, seed, num_threads):
-        super().__init__(feature_groups=feature_groups, seed=seed, num_threads=num_threads)
+    def __init__(self, feature_groups, seed, num_threads, **kwargs):
+        super().__init__(feature_groups=feature_groups, seed=seed, num_threads=num_threads, **kwargs)
         self.num_threads = num_threads
 
     def fit(self, interactions, recipes=None, training_quarters=(), cutoff=None):
@@ -160,8 +161,27 @@ class _TreeReranker(LightGBM):
 class XGBoost(_TreeReranker):
     """The depth-five configuration selected by rolling validation Recall@10."""
 
-    def __init__(self, seed=10718, num_threads=4):
-        super().__init__(XGBOOST_GROUPS, seed, num_threads)
+    def __init__(
+        self, seed=10718, num_threads=4, embeddings=None, n_candidates=1000,
+        negatives_per_positive=10, hard_negative_frac=0.0,
+        feature_groups=XGBOOST_GROUPS, num_boost_round=120, max_depth=5,
+        learning_rate=0.0822948425999282, min_child_weight=5.7853773583089464,
+        subsample=0.8853370472924392, colsample_bytree=0.6526173563026589,
+        reg_lambda=1.0971159919250149,
+    ):
+        super().__init__(feature_groups, seed, num_threads, n_candidates=n_candidates,
+                         negatives_per_positive=negatives_per_positive,
+                         hard_negative_frac=hard_negative_frac)
+        self.num_boost_round = num_boost_round
+        self.xgb_params = {
+            "objective": "binary:logistic", "tree_method": "hist",
+            "nthread": num_threads, "seed": seed, "max_depth": max_depth,
+            "eta": learning_rate, "min_child_weight": min_child_weight,
+            "subsample": subsample, "colsample_bytree": colsample_bytree,
+            "lambda": reg_lambda,
+        }
+        if embeddings is not None:
+            self.content_ = _RecipeContent(embeddings)
 
     def _matrix(self, features):
         # Preserve numeric zero separately from NaN in XGBoost's sparse input.
@@ -176,19 +196,7 @@ class XGBoost(_TreeReranker):
         import xgboost as xgb
 
         matrix = xgb.QuantileDMatrix(self._matrix(X), label=y, nthread=self.num_threads)
-        params = {
-            "objective": "binary:logistic",
-            "tree_method": "hist",
-            "nthread": self.num_threads,
-            "seed": self.seed,
-            "max_depth": 5,
-            "eta": 0.0822948425999282,
-            "min_child_weight": 5.7853773583089464,
-            "subsample": 0.8853370472924392,
-            "colsample_bytree": 0.6526173563026589,
-            "lambda": 1.0971159919250149,
-        }
-        return xgb.train(params, matrix, num_boost_round=120)
+        return xgb.train(self.xgb_params, matrix, num_boost_round=self.num_boost_round)
 
     def _score(self, features):
         return self.model_.inplace_predict(self._matrix(features))
