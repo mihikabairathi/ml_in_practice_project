@@ -55,6 +55,7 @@ def parse_args(argv=None):
     )
     models.add_argument("--max-users", type=int, help="Score a common random sample of N positive-outcome users per quarter; training is unchanged")
     models.add_argument("--sample-seed", type=int, default=10718, help="Evaluation user-sampling seed")
+    models.add_argument("--quarter", help="Run one quarter start (YYYY-MM-DD) from the selected split")
 
     paths = parser.add_argument_group("data and outputs")
     paths.add_argument("--split-dir", type=Path, default=SPLIT_DIR, help="Input directory from make_splits.py")
@@ -284,7 +285,14 @@ def run(args):
     if len(args.models) > 1:
         return run_isolated(args)
     splits = RollingSplits(args.split_dir)
-    quarters = splits.evaluation_quarters(args.split)
+    if args.quarter:
+        selected = splits.windows[splits.windows.split.eq(args.split) & splits.windows.start.eq(pd.Timestamp(args.quarter))]
+        if len(selected) != 1:
+            raise ValueError(f"No {args.split} quarter starts at {args.quarter}")
+        window = selected.iloc[0]
+        quarters = [splits._make_quarter(window.start, window.end)]
+    else:
+        quarters = splits.evaluation_quarters(args.split)
     if args.max_quarters is not None:
         quarters = quarters[: args.max_quarters]
 

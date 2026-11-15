@@ -45,7 +45,7 @@ def load_config(path):
         config = tomllib.load(source)
     if config.get("schema_version") != 1:
         raise ValueError("Experiment config must have schema_version = 1")
-    unexpected = set(config) - {"schema_version", "description", "evaluation", "embeddings", "models"}
+    unexpected = set(config) - {"schema_version", "description", "evaluation", "diagnostics", "embeddings", "models"}
     if unexpected:
         raise ValueError(f"Unknown config fields: {sorted(unexpected)}")
     evaluation = config.get("evaluation", {})
@@ -56,6 +56,12 @@ def load_config(path):
         raise ValueError("evaluation.split must be 'val' or 'test'")
     for name in ("candidate_k", "save_top_k"):
         positive_integer(evaluation.get(name, 1000 if name == "candidate_k" else 100), name)
+    diagnostics = config.get("diagnostics", {})
+    if (set(diagnostics) - {"k", "substitute_threshold", "similarity"}
+            or diagnostics.get("k", 10) != 10
+            or diagnostics.get("similarity", "mean_name_ingredients_cosine") != "mean_name_ingredients_cosine"
+            or not 0 <= diagnostics.get("substitute_threshold", 0.8) <= 1):
+        raise ValueError("Invalid diagnostics: use k=10, mean_name_ingredients_cosine and a threshold in [0,1]")
     if set(config.get("embeddings", {})) - {"directory"}:
         raise ValueError("embeddings only accepts a directory field")
     models = config.get("models")

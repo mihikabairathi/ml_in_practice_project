@@ -192,10 +192,8 @@ versions), checkpointed `results.csv`, and
 `recommendations/<quarter-start>/<model>.parquet`. Each prediction file has
 `user_id` and `recipe_ids`: by default the first 100 distinct, unseen recipes,
 completed using the evaluator's popularity fallback. Override the saved list
-length with `--save-top-k`. These files allow the approved substitute-matching,
-diversity and top-ten exposure metrics to be computed later without refitting;
-this change prepares the configurations and prediction artifacts, not those
-additional metric implementations.
+length with `--save-top-k`. These files support substitute-matching, diversity
+and top-ten exposure metrics without refitting (see the resumable test job below).
 
 The scored users are the same positive-outcome users as the existing evaluator;
 `--max-users` draws a reproducible common sample for every model. Scores still
@@ -207,6 +205,63 @@ Run the configuration and integration checks with:
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+### Resumable frozen-model test job
+
+The job below generates all MiniLM arrays, evaluates the six fixed models on
+all 20 test quarters and all scored users, and calculates the three approved
+top-ten diagnostics. It runs each model-quarter in its own process.
+
+```bash
+# Launch in the background. On macOS, caffeinate prevents idle sleep while it runs.
+python scripts/run_frozen_test.py --run-dir artifacts/frozen_test --detach
+
+# Show stage, current model/quarter, completed counts and embedding progress.
+python scripts/run_frozen_test.py --run-dir artifacts/frozen_test --status
+
+# Follow completed checkpoints and the current stage.
+tail -f artifacts/frozen_test/run.log
+```
+
+Rerun the exact launch command after an interruption. It resumes embedding
+generation from the last flushed 4,096-recipe chunk, and reuses checksummed
+prediction and metric checkpoints. The interrupted model-quarter may need to
+refit; earlier model-quarters do not. If only a diagnostic artifact is missing
+or damaged, the job reconstructs it from the saved predictions. Old failed
+attempts and their logs are preserved. A run-directory lock prevents duplicate
+jobs, and changes to model/evaluation code, data, library versions or embedding
+arrays are rejected rather than silently mixed into an existing run.
+
+The run directory contains:
+
+- `status.json`, `run.log`, `embeddings.log`, and `logs/`: progress and worker logs.
+- `config.toml`, `manifest.json`, `embedding_identity.json`: frozen settings and provenance.
+- `units/<model>/<quarter>/`: prediction checkpoints, per-user metrics and matched recipe IDs.
+- `quarter_metrics.csv`: original metrics plus the three diagnostics per model-quarter.
+- `summary.csv`: equal-weight means across completed quarters, with a completed-quarter count.
+- `resume_command.txt`: the exact background launch/restart command.
+
+Both CSV summaries update after each completed model-quarter. Partial summaries
+are marked by their completed-quarter counts; the status becomes `complete`
+only after all 120 model-quarters finish. The embedding arrays are shared under
+`data/processed/embeddings/minilm_joint/` with their own `progress.json`.
+
+The metric definitions are:
+
+- **Soft Recall@10:** coverage of held-out five-star recipes, with exact IDs
+  worth one and substitutes with similarity at least 0.8 worth their similarity.
+  Exact matches are locked first; remaining matches maximize total credit with
+  each recommended and held-out recipe used at most once.
+- **Diversity@10:** average pairwise dissimilarity within a user's top ten.
+  Similarity is the equally weighted mean of uncentered name and ingredient
+  cosine, clipped to [0,1], using frozen MiniLM vectors for both metrics.
+- **Top10 Exposure Share:** fraction of all users' top-ten slots occupied by
+  the ten most frequently shown recipe IDs. Ranks 11 and below never count.
+
+The same existing five-star-outcome cohort is used for all models in a quarter.
+Recall and diversity average over users within a quarter; exposure is computed
+across that quarter's users. All three then average quarters equally. Exact
+Recall@10 recovered from saved predictions must agree with the base evaluator.
 
 Model settings exposed by the original CLI are:
 
