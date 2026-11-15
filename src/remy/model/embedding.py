@@ -10,8 +10,10 @@ from remy.splits import MIN_REVIEWS
 
 EMBEDDING_DIR = PROJECT_ROOT / 'data/processed/embeddings/minilm_joint'
 
-def load_embeddings(kind='joint'):
-    directory = EMBEDDING_DIR.parent / 'tfidf' if kind == 'tfidf' else EMBEDDING_DIR
+def load_embeddings(kind='joint', directory=None):
+    from pathlib import Path
+
+    directory = (EMBEDDING_DIR.parent / 'tfidf' if kind == 'tfidf' else EMBEDDING_DIR) if directory is None else Path(directory)
     ids = np.load(directory / 'id.npy')
     if kind == 'tfidf':
         return dict(id=ids, vectors=sparse.load_npz(directory / 'vectors.npz'))

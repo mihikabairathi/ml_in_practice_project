@@ -11,8 +11,10 @@ from remy.evaluate import METRICS
 
 BACKGROUND = "#EAEAEA"
 MINT, PEACH, SAND, SKY = "#94D8A1", "#E1C6BA", "#E4D6AB", "#A9C8E8"
-MODEL_COLORS = {"popularity": MINT, "lightgbm": PEACH, "knn": SAND, "llm": SKY}
-MODEL_LABELS = {"popularity": "Popularity", "lightgbm": "LGBM", "knn": "KNN", "llm": "LLM"}
+MODEL_COLORS = {"popularity": MINT, "lightgbm": PEACH, "knn": SAND, "llm": SKY,
+                "embedding": "#B5A1CE", "embedding_trained": SKY, "xgboost": "#D9A478"}
+MODEL_LABELS = {"popularity": "Popularity", "lightgbm": "LGBM", "knn": "KNN", "llm": "LLM",
+                "embedding": "Frozen embeddings", "embedding_trained": "Trained embeddings", "xgboost": "XGBoost"}
 
 
 def _style_axes(ax):
@@ -39,7 +41,7 @@ def save_plots(results: pd.DataFrame, output: Path) -> list[Path]:
     from matplotlib.ticker import FuncFormatter, MaxNLocator, PercentFormatter
 
     models = list(results["model"].drop_duplicates())
-    colors = {name: MODEL_COLORS[name] for name in models}
+    colors = {name: MODEL_COLORS.get(name, [MINT, PEACH, SAND, SKY][i % 4]) for i, name in enumerate(models)}
     palette = [MINT, PEACH, SAND]
     saved = []
 
@@ -113,7 +115,8 @@ def save_plots(results: pd.DataFrame, output: Path) -> list[Path]:
                     edgecolor="#777777",
                     linewidth=0.6,
                 )
-                ax.bar_label(bars, fmt="%.3f", padding=5, fontsize=9)
+                if len(models) <= 3:
+                    ax.bar_label(bars, fmt="%.3f", padding=5, fontsize=9)
             _style_axes(ax)
             ax.set_xlabel("Metric")
             ax.set_ylabel("Score")
@@ -133,7 +136,8 @@ def save_plots(results: pd.DataFrame, output: Path) -> list[Path]:
         comparison_panel(metrics_ax, ["HR@10", "HR@100", "Recall@10", "Recall@100"])
         comparison_panel(ndcg_ax, ["NDCG", "NDCG@Candidates"])
         ndcg_ax.legend(loc="upper right")
-        title = " vs. ".join(MODEL_LABELS.get(name, name) for name in models)
+        title = (" vs. ".join(MODEL_LABELS.get(name, name) for name in models)
+                 if len(models) <= 3 else f"Rolling {results['split'].iloc[0]} model comparison")
         fig.suptitle(title, fontsize=20, fontfamily="serif", color="#123744")
         metrics_path = output.with_name(f"{output.stem}_metrics.png")
         fig.savefig(metrics_path, dpi=160)
