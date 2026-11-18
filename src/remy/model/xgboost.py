@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 from sklearn.preprocessing import MultiLabelBinarizer, normalize
+from tqdm import tqdm
 
 from remy.model.embedding import EMBEDDING_DIR
 from remy.model.lightgbm import ALL_GROUPS, BASELINE_GROUPS, GROUP_COLS, LightGBM
@@ -87,6 +88,7 @@ class _TreeReranker(LightGBM):
         quarters = list(training_quarters)
         if recipes is None or not quarters:
             raise ValueError("Recipes and completed training quarters are required")
+        tqdm.write(f"{type(self).__name__}: preparing recipe features and saved MiniLM embeddings")
         self.__dict__.pop("model_", None)
         recipes = recipes.drop_duplicates("id").reset_index(drop=True)
         self.date_col_ = self._find_date_col(interactions)
@@ -110,6 +112,7 @@ class _TreeReranker(LightGBM):
         self.submitted_ = pd.to_datetime(recipes.set_index("id").submitted)
         self.numeric_width_ = len(self.dense_cols_) + len(self.content_.columns)
 
+        tqdm.write(f"{type(self).__name__}: building fitted user profiles")
         popularity = Popularity().fit(interactions, recipes)
         self.ranking_, self.seen_ = popularity.ranking_, popularity.seen_
         self.candidates_ = self.ranking_[:self.n_candidates]
@@ -117,16 +120,24 @@ class _TreeReranker(LightGBM):
         self.user_features_ = self.state_["user"]
 
         rng = np.random.default_rng(self.seed)
-        examples = [part for quarter in quarters if (part := self._quarter_examples(quarter, rng)) is not None]
+        examples = []
+        with tqdm(quarters, desc=f"{type(self).__name__}: training features", unit="quarter") as progress:
+            for quarter in progress:
+                progress.set_postfix(quarter=str(pd.Timestamp(quarter.start).date()))
+                part = self._quarter_examples(quarter, rng)
+                if part is not None:
+                    examples.append(part)
         if not examples:
             raise ValueError("Training quarters contain no examples")
         features, labels, _ = zip(*examples)
         y = np.concatenate(labels)
         if np.unique(y).size < 2:
             raise ValueError("Training data must contain both classes")
+        tqdm.write(f"{type(self).__name__}: assembling {len(y):,} training examples")
         X = sparse.vstack(features, format="csr")
         del examples, features, labels
         self.model_ = self._train(X, y)
+        tqdm.write(f"{type(self).__name__}: fit complete")
         return self
 
     def _state(self, history, cutoff):
@@ -195,8 +206,16 @@ class XGBoost(_TreeReranker):
     def _train(self, X, y):
         import xgboost as xgb
 
+        tqdm.write("XGBoost: quantizing training matrix (this can take a while)")
         matrix = xgb.QuantileDMatrix(self._matrix(X), label=y, nthread=self.num_threads)
-        return xgb.train(self.xgb_params, matrix, num_boost_round=self.num_boost_round)
+        with tqdm(total=self.num_boost_round, desc="XGBoost: boosting", unit="round") as progress:
+            class Progress(xgb.callback.TrainingCallback):
+                def after_iteration(self, model, epoch, evals_log):
+                    progress.update(1)
+                    return False
+
+            return xgb.train(self.xgb_params, matrix, num_boost_round=self.num_boost_round,
+                             callbacks=[Progress()])
 
     def _score(self, features):
         return self.model_.inplace_predict(self._matrix(features))

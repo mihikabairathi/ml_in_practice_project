@@ -481,7 +481,10 @@ uv run --extra abtest uvicorn remy.abtest.app:app --port 8000      # then open h
 ```
 
 The first start fits Popularity and XGBoost on all completed training quarters;
-allow time and memory for feature construction and fitting. Later starts reuse cached models.
+allow time and memory for feature construction and fitting. Terminal progress bars show
+completed training quarters and boosting rounds, with stage messages for loading embeddings,
+building profiles, quantizing the matrix and saving the cache. Later starts explicitly report
+loading cached models instead of training.
 Wait for `Survey ready` in the log. `GET /healthz` returns `{"ok": true}` once the app is serving.
 
 ### Try it locally with sample data

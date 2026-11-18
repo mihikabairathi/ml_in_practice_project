@@ -23,6 +23,7 @@ from threading import Lock
 import numpy as np
 import pandas as pd
 from scipy import sparse
+from tqdm import tqdm
 
 from remy.abtest.data import TrainingData
 from remy.model.knn import KNNRecommender
@@ -81,10 +82,16 @@ class SurveyModel:
     def fit_or_load(self, data: TrainingData, cache_dir: Path) -> None:
         path = Path(cache_dir) / self.cache_key(data.cutoff)
         if path.exists():
+            tqdm.write(f"{self.model_class.__name__}: loading cached model from {path}")
             self.model = pickle.loads(path.read_bytes())
+            tqdm.write(f"{self.model_class.__name__}: cache loaded; no training needed")
             return
+        tqdm.write(f"{self.model_class.__name__}: no cached model; fitting on "
+                   f"{len(data.history):,} reviews and {len(data.training_quarters) if self.supervised else 0} "
+                   "completed training quarters")
         self.fit_once(data)
         path.parent.mkdir(parents=True, exist_ok=True)
+        tqdm.write(f"{self.model_class.__name__}: saving fitted model to {path}")
         path.write_bytes(pickle.dumps(self.model))
 
 
