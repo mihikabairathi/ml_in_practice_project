@@ -367,6 +367,8 @@ Learned item-side state (similarities, trees, rankings) is never touched.
   there.
 - KNN adds a row to its user-item matrix.
 - LightGBM adds rows to its user feature table and tag-taste matrices.
+- XGBoost adds the same user/tag state plus MiniLM profiles and recent liked recipes,
+  preserving the fitted catalog centering and removing all participant state afterward.
 
 Then check that the wrapper serves new users exactly like the model does:
 
@@ -376,8 +378,8 @@ uv run python scripts/check_survey_models.py --models mymodel
 
 The check copies real training users into a new user and requires identical
 recommendations and fully restored model state. Fitted models are cached by
-cutoff, params and a hash of the model's source file, so editing a model makes
-the survey refit it automatically.
+cutoff, params and model source. XGBoost also includes its inherited feature code
+in the cache identity, so changes to those features trigger a refit.
 
 ## File paths
 
@@ -452,7 +454,8 @@ Each participant:
 Edit `src/remy/abtest/config.yaml`:
 
 - `train_cutoff`
-- the two models (`models.a` / `models.b`: `type` from `MODELS` plus constructor `params`)
+- the two models (`models.a` / `models.b`: `type` from `MODELS` plus constructor `params`);
+  the default is Popularity versus the selected XGBoost + MiniLM model
 - the quiz and list sizes
 - whether to show community stats
 - the output paths
@@ -463,13 +466,25 @@ To use another file, set `REMY_ABTEST_CONFIG=/path/to/config.yaml`. To record an
 ### Run locally
 
 The app needs `data/processed/rolling/`, made by `download_data.py` then `make_splits.py`.
+The default XGBoost model also needs `id.npy`, `name.npy`, and `ingredients.npy`
+in `data/processed/embeddings/minilm_joint/`. Generate them once with
+`uv run python scripts/embed_recipes.py --device mps` (use `--device cpu` without MPS),
+and copy these files to the serving machine alongside the rolling data.
+XGBoost uses its selected feature groups and tree settings by default, including
+the three MiniLM similarity features; no embeddings need to be generated per participant.
+If you replace the saved embedding arrays, clear the XGBoost files from the configured
+`model_cache_dir` before restarting so the fitted cache is rebuilt against those inputs.
 
 ```bash
 uv sync --extra abtest
-uv run uvicorn remy.abtest.app:app --port 8000      # then open http://localhost:8000
+uv run --extra abtest uvicorn remy.abtest.app:app --port 8000      # then open http://localhost:8000
 ```
 
-The first start fits the models: about 2 minutes for Popularity plus LightGBM at the 2016 cutoff.
+The first start fits Popularity and XGBoost on all completed training quarters;
+allow time and memory for feature construction and fitting. Terminal progress bars show
+completed training quarters and boosting rounds, with stage messages for loading embeddings,
+building profiles, quantizing the matrix and saving the cache. Later starts explicitly report
+loading cached models instead of training.
 Wait for `Survey ready` in the log. `GET /healthz` returns `{"ok": true}` once the app is serving.
 
 ### Try it locally with sample data
@@ -478,7 +493,7 @@ You need the data from `download_data.py` and `make_splits.py`, plus `uv sync --
 
 1. **Click through it yourself.** Start the app, then open http://localhost:8000.
    ```bash
-   uv run uvicorn remy.abtest.app:app --port 8000
+   uv run --extra abtest uvicorn remy.abtest.app:app --port 8000
    ```
    Your test answers go to a new file in `data/processed/abtest/responses/`, the same folder real
    participants' files go to. Delete or move your test files before the real study starts.
