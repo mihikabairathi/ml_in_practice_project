@@ -28,14 +28,25 @@ NEW_USER_ID = -1
 def state_snapshot(model) -> dict:
     """Sizes of everything a wrapper might touch, to confirm remove_user undid add_user."""
     snap = {}
-    for name, value in vars(model).items():
-        if isinstance(value, dict) and name == "state_":
-            snap.update({f"state_.{k}": getattr(v, "shape", None) or len(v)
-                         for k, v in value.items() if hasattr(v, "__len__") or hasattr(v, "shape")})
-        elif hasattr(value, "shape"):
+
+    def visit(name, value):
+        if hasattr(value, "shape"):
             snap[name] = value.shape
-        elif isinstance(value, (dict, list, set, pd.Series, pd.DataFrame)):
+        elif isinstance(value, dict):
             snap[name] = len(value)
+            if name == "state_":
+                for key, item in value.items():
+                    visit(f"{name}.{key}", item)
+        elif isinstance(value, (tuple, list)):
+            snap[name] = len(value)
+            if name.startswith("state_."):
+                for index, item in enumerate(value):
+                    visit(f"{name}[{index}]", item)
+        elif isinstance(value, set):
+            snap[name] = len(value)
+
+    for name, value in vars(model).items():
+        visit(name, value)
     return snap
 
 

@@ -26,5 +26,5 @@ models:
     type: popularity
     params: {}
   b:
-    type: lightgbm
-    params: {}                  # defaults: all feature groups; trains on all quarters before train_cutoff
+    type: xgboost
+    params: {}                  # selected XGBoost + MiniLM defaults; all completed training quarters

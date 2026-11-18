@@ -28,6 +28,7 @@ from remy.abtest.data import TrainingData
 from remy.model.knn import KNNRecommender
 from remy.model.lightgbm import LightGBM
 from remy.model.popularity import Popularity
+from remy.model.xgboost import XGBoost
 
 
 class SurveyModel:
@@ -156,6 +157,7 @@ class LightGBMSurvey(SurveyModel):
             st["freq"] = sparse.vstack([st["freq"], mini["freq"][r]], format="csr")
             st["norm"] = sparse.vstack([st["norm"], mini["norm"][r]], format="csr")
             st["urow"] = pd.concat([st["urow"], pd.Series({user_id: st["freq"].shape[0] - 1})])
+        return mini
 
     def remove_user(self, user_id):
         super().remove_user(user_id)
@@ -166,8 +168,60 @@ class LightGBMSurvey(SurveyModel):
             st["freq"], st["norm"] = st["freq"][:-1], st["norm"][:-1]
 
 
+class XGBoostSurvey(LightGBMSurvey):
+    """Add XGBoost's MiniLM profiles and recent likes alongside its tag taste.
+
+    The model's own _state builds the participant's features with the same
+    available catalog as fit. Only their user rows are attached; fitted catalog
+    means and all learned item-side state stay unchanged.
+    """
+
+    model_class = XGBoost
+
+    def cache_key(self, cutoff):
+        # XGBoost inherits its feature construction and historical sampling from
+        # LightGBM, so changes there must invalidate the fitted-model cache too.
+        source = inspect.getsource(sys.modules[LightGBM.__module__])
+        digest = hashlib.sha1((super().cache_key(cutoff) + source).encode()).hexdigest()[:10]
+        return f"{self.model_class.__name__}-{pd.Timestamp(cutoff).date()}-{digest}.pkl"
+
+    def add_user(self, ratings):
+        m, st = self.model, self.model.state_
+        user_id = ratings["user_id"].iat[0]
+        # Keep original references so cleanup also restores nested content arrays
+        # exactly, and a failed add cannot leave partially attached user state.
+        self._user_state_before = {
+            key: st[key] for key in ("user", "freq", "norm", "urow", "content")
+        }
+        self._user_features_before = m.user_features_
+        try:
+            mini = super().add_user(ratings)
+            users, means, profiles, recent = st["content"]
+            new_users, _, new_profiles, new_recent = mini["content"]
+            row = new_users.get_indexer([user_id])[0]
+            if row >= 0:  # no liked embedded recipes means no content profile
+                st["content"] = (
+                    users.append(new_users[row:row + 1]),
+                    means,
+                    [np.concatenate([old, new[row:row + 1]], axis=0)
+                     for old, new in zip(profiles, new_profiles)],
+                    np.concatenate([recent, new_recent[row:row + 1]], axis=0),
+                )
+        except BaseException:
+            self.remove_user(user_id)
+            raise
+
+    def remove_user(self, user_id):
+        SurveyModel.remove_user(self, user_id)
+        before = self.__dict__.pop("_user_state_before", None)
+        if before is not None:
+            self.model.state_.update(before)
+            self.model.user_features_ = self.__dict__.pop("_user_features_before")
+
+
 MODELS: dict[str, type[SurveyModel]] = {
     "popularity": PopularitySurvey,
     "knn": KNNSurvey,
     "lightgbm": LightGBMSurvey,
+    "xgboost": XGBoostSurvey,
 }
